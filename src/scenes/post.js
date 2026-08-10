@@ -8,9 +8,10 @@ const FilmShader = {
     uTime: { value: 0 },
     // task-12: was 0.09, tuned against a framebuffer that (pre gamma-fix)
     // never actually reached midtone brightness so the grain barely showed.
-    // At correct exposure 0.09 reads as heavy static noise in a still frame;
-    // 0.045 keeps the film-grain texture without fighting "clearly readable."
-    uGrain: { value: 0.045 },
+    // fix-round: user feedback was "a ton of grain" even at 0.045 — it reads
+    // fine in a single still frame but compounds visibly over motion/video.
+    // 0.018 keeps a faint film texture without reading as static noise.
+    uGrain: { value: 0.018 },
     uVignette: { value: 0.35 },
     uCA: { value: 0.0015 },
   },

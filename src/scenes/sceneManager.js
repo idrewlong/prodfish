@@ -18,7 +18,9 @@ export function initScene({ canvas, state, tier, models }) {
   // task-12: previously boosted to 2.3 while fighting a missing gamma-encode
   // bug in the post-processing final pass (see post.js) that made every
   // light bump look ineffective. With that fixed, 1.4 is plenty.
-  renderer.toneMappingExposure = 1.4;
+  // fix-round: user wanted "a tad darker overall" — pulled ~14% further,
+  // still clearly readable in the door/interior screenshots.
+  renderer.toneMappingExposure = 1.2;
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(NIGHT_SKY);
