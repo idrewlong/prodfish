@@ -173,3 +173,30 @@ body {
   text-transform: uppercase;
   color: rgba(216, 211, 200, 0.25);
 }
+
+/* ---------- reduced motion: static composed page ---------- */
+.reduced #blackout { opacity: 0; }
+.reduced #hero { position: relative; height: 100vh; }
+.reduced #scroll-track { height: auto; }
+.reduced #chapel {
+  position: relative;
+  background: radial-gradient(ellipse at 50% 30%, #2b0402, #0d0100 75%);
+}
+.reduced .hint-arrow { animation: none; }
+
+/* ---------- no webgl: css-only layered mood ---------- */
+.no-webgl #scene { display: none; }
+.no-webgl #blackout { opacity: 0; }
+.no-webgl body, .no-webgl { background: var(--night); }
+.no-webgl #hero {
+  position: relative;
+  height: 100vh;
+  background:
+    radial-gradient(ellipse 60% 40% at 50% 68%, rgba(185, 178, 162, 0.14), transparent 70%),
+    linear-gradient(#04060a, #10130f);
+}
+.no-webgl #scroll-track { height: auto; }
+.no-webgl #chapel {
+  position: relative;
+  background: radial-gradient(ellipse at 50% 30%, #2b0402, #0d0100 75%);
+}
