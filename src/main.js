@@ -4,6 +4,8 @@ import { createState } from './choreography.js';
 import { detectTier } from './device.js';
 import { initScene } from './scenes/sceneManager.js';
 import { makeExterior, makeThreshold, makeInterior } from './scenes/placeholders.js';
+import { initScroll } from './scroll.js';
+import { buildTimeline } from './timeline.js';
 
 function debugScenes() {
   document.body.style.overflow = 'auto';
@@ -26,11 +28,8 @@ function boot() {
     app.setTextures(name, new THREE.CanvasTexture(color), new THREE.CanvasTexture(depth));
   }
 
-  // temporary: show exterior immediately until the timeline exists (Task 7)
-  state.exteriorOpacity = 1;
-  state.fireflies = 1;
-  document.getElementById('blackout').style.opacity = '0';
-
+  initScroll();
+  buildTimeline(state);
   gsap.ticker.add(() => app.render());
 }
 
