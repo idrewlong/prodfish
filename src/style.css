@@ -42,7 +42,11 @@ body {
   z-index: 2;
   pointer-events: none;
   background: #000;
-  opacity: 1;
+  /* fix-round: was 1 (pure black at rest). At 0.55 the graveyard/church is
+     faintly sensed behind the title before any scroll, per user feedback --
+     the arrival tween in timeline.js starts explicitly from this same value
+     (fromTo, not to) so the two never drift out of sync. */
+  opacity: 0.55;
 }
 
 #loading {
@@ -117,6 +121,28 @@ body.ready #loading { opacity: 0; pointer-events: none; }
   justify-content: center;
   gap: 2rem;
   padding: 4rem 1.5rem;
+  /* fix-round: #chapel sits in normal document flow at the bottom of the
+     600vh #scroll-track, so it starts sliding into the fixed viewport
+     purely from its own height vs. the track's total height -- independent
+     of the master timeline's act boundaries. That mismatch (this block was
+     already fully visible at ~76% scroll, well before the beats act even
+     starts at 82%, while the 3D camera was still mid-drift down the aisle)
+     is exactly the "position shifts" jump the user felt. Starting it
+     invisible and letting the master timeline (see timeline.js ACT 5) ramp
+     opacity in only once the camera has actually settled decouples the two
+     again. A soft top-down gradient (transparent -> dark) replaces a flat
+     opaque panel so the altar's red glow and stonework keep bleeding
+     through behind the embed instead of hard-cutting to a scene change.
+     .reduced / .no-webgl below override back to opaque + visible since
+     neither of those paths runs the scroll timeline. */
+  opacity: 0;
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    rgba(8, 2, 2, 0.35) 30%,
+    rgba(6, 2, 1, 0.68) 65%,
+    rgba(5, 2, 1, 0.85) 100%
+  );
 }
 
 .chapel-title {
@@ -136,7 +162,11 @@ body.ready #loading { opacity: 0; pointer-events: none; }
   box-shadow:
     0 0 60px rgba(193, 23, 15, 0.22),
     inset 0 0 40px rgba(0, 0, 0, 0.7);
-  background: rgba(5, 2, 1, 0.72);
+  /* fix-round: was 0.72 -- lightened so the altar wall/cross glow (now held
+     behind #chapel's own semi-transparent backdrop, see above) keeps
+     reading through the frame's padding instead of the whole thing reading
+     as a flat opaque card dropped on top of the 3D scene. */
+  background: rgba(5, 2, 1, 0.4);
   padding: 10px;
 }
 .altar-frame iframe {
@@ -198,6 +228,7 @@ body.ready #loading { opacity: 0; pointer-events: none; }
 .reduced #scroll-track { height: auto; }
 .reduced #chapel {
   position: relative;
+  opacity: 1;
   background: radial-gradient(ellipse at 50% 30%, #2b0402, #0d0100 75%);
 }
 .reduced .hint-arrow { animation: none; }
@@ -216,5 +247,6 @@ body.ready #loading { opacity: 0; pointer-events: none; }
 .no-webgl #scroll-track { height: auto; }
 .no-webgl #chapel {
   position: relative;
+  opacity: 1;
   background: radial-gradient(ellipse at 50% 30%, #2b0402, #0d0100 75%);
 }

@@ -31,9 +31,13 @@ export function buildTimeline(state) {
   const DOOR_IN_T = Math.min(T_DOOR + 0.05, 0.9); // just inside the nave
 
   // ACT 1 — ARRIVAL: world emerges out of black; barely any motion yet.
+  // fix-round: #blackout now starts at 0.55 opacity (style.css), not 1 --
+  // the scene should be faintly visible at rest, behind the title, instead
+  // of a pure black void. fromTo (not to) so the tween's start value is
+  // explicit and can never drift out of sync with the CSS default.
   tl.to(state, { pathT: 0.08, duration: arrivalEnd }, 0)
     .to(state, { fireflies: 1, duration: arrivalEnd * 0.8 }, 0.01)
-    .to('#blackout', { opacity: 0, duration: arrivalEnd * 0.8 }, 0.01)
+    .fromTo('#blackout', { opacity: 0.55 }, { opacity: 0, duration: arrivalEnd * 0.8 }, 0.01)
     .to('#hero', { opacity: 0, y: -70, duration: 0.08 }, arrivalEnd - 0.03);
 
   // ACT 2 — APPROACH: the long walk; fog thickens; crows scatter mid-way.
@@ -73,7 +77,16 @@ export function buildTimeline(state) {
     .to(state, { swayAmp: 0.3, duration: 0.1 }, chapelStart);
 
   // ACT 5 — BEATS: settle before the altar; residual drift only.
-  tl.to(state, { pathT: 1, duration: 1 - chapelEnd }, chapelEnd);
+  // fix-round: #chapel (the BeatStars embed DOM section) is an in-flow block
+  // at the bottom of the 600vh scroll-track, so it was already sliding into
+  // the viewport around 76% scroll purely from its own height vs. the
+  // track's total height -- well before this act even starts, while the
+  // camera was still mid-drift down the aisle in ACT 4. That mismatch read
+  // as a jarring scene change. #chapel now starts at opacity 0 (style.css)
+  // and fades in here, driven by the same scroll fraction as the camera
+  // settle, so it only becomes visible once pathT has essentially arrived.
+  tl.to(state, { pathT: 1, duration: 1 - chapelEnd }, chapelEnd)
+    .to('#chapel', { opacity: 1, duration: (1 - chapelEnd) * 0.55, ease: 'sine.in' }, chapelEnd);
 
   return tl;
 }
