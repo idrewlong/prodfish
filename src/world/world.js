@@ -340,9 +340,58 @@ export function buildWorld({ scene, models, grassCount = 0 }) {
   // bump was fighting a bug that gamma-crushed the final framebuffer, not
   // actual insufficient light. With that fixed, values close to the
   // original brief's targets read correctly again.
+  const MOON_LIGHT_POS = new THREE.Vector3(-6, 18, -30);
   const moon = new THREE.DirectionalLight('#b9c4d6', 3.5);
-  moon.position.set(-6, 18, -30);
+  moon.position.copy(MOON_LIGHT_POS);
   scene.add(moon, new THREE.HemisphereLight('#4a5c78', '#241c14', 1.6));
+
+  // Visible moon disc: a pale, un-tonemapped sphere placed along the SAME
+  // direction the moon DirectionalLight shines from (so the glow the church
+  // catches actually has a legible source overhead), plus a larger, fainter
+  // additive halo sprite behind it for a soft glow. Distance 70 keeps it
+  // comfortably inside the sky dome (radius 115) and camera far plane (130),
+  // high enough in the frame to sit above/behind the church silhouette
+  // during the approach without drifting off the top edge. Un-tonemapped for
+  // the same reason as the sky dome/road/ground comments above: ACES's
+  // shadow toe crushes near-white/near-black values unpredictably depending
+  // on exposure, and a moon that dims when exposure is tuned down reads as
+  // a bug, not mood.
+  const moonPos = MOON_LIGHT_POS.clone().normalize().multiplyScalar(70);
+  const moonDisc = new THREE.Mesh(
+    new THREE.SphereGeometry(3.5, 20, 16),
+    new THREE.MeshBasicMaterial({ color: '#cfd8e8', fog: false, toneMapped: false }),
+  );
+  moonDisc.position.copy(moonPos);
+  moonDisc.name = 'moonDisc';
+  scene.add(moonDisc);
+
+  const moonHaloTex = (() => {
+    const size = 128;
+    const c = document.createElement('canvas');
+    c.width = c.height = size;
+    const ctx = c.getContext('2d');
+    const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+    g.addColorStop(0, 'rgba(207,216,232,0.85)');
+    g.addColorStop(0.35, 'rgba(207,216,232,0.32)');
+    g.addColorStop(1, 'rgba(207,216,232,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, size, size);
+    return new THREE.CanvasTexture(c);
+  })();
+  const moonHalo = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: moonHaloTex,
+    color: '#cfd8e8',
+    transparent: true,
+    opacity: 0.5,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    fog: false,
+    toneMapped: false,
+  }));
+  moonHalo.scale.set(22, 22, 1);
+  moonHalo.position.copy(moonPos);
+  moonHalo.name = 'moonHalo';
+  scene.add(moonHalo);
 
   // A second moon-toned fill from behind the camera's approach, so the
   // graveyard/tree silhouettes catch light from the front too, not just a
@@ -412,17 +461,29 @@ export function buildWorld({ scene, models, grassCount = 0 }) {
   }
   scene.add(chapelRoot);
 
-  // Our own hinged door in the doorway plane (hinge on the left jamb). Sized
-  // to the real modeled opening (~2.0m wide x ~2.48m tall at
-  // CHAPEL_TARGET_HEIGHT — see task-12-report.md), inset slightly so the
-  // leaf clears the stone jambs either side.
+  // Our own hinged door in the doorway plane, hinge on the left jamb. Sized
+  // and positioned to the ACTUAL modeled opening — measured by raycasting
+  // the live chapel geometry (a horizontal sweep at eye height for the
+  // left/right jamb, a sweep at x=0 for the floor/lintel) rather than an
+  // eyeballed guess: the opening spans x=[-0.84, 1.05] (width 1.89m),
+  // y=[0, 2.49m]. The facade's outer face — where the leaf must sit flush,
+  // NOT the path's z=0 threshold landmark — is always exactly z=-0.4 by
+  // construction: chapelRoot is pushed back by `box.max.z + 0.4` above, so
+  // the post-push-back facade's max.z is always -0.4 regardless of model
+  // size. The previous leaf (positioned at z=0, x=[-1.0, 0.9]) floated 0.4m
+  // in front of the real wall and left a ~0.15m gap at the right/latch jamb
+  // — this is what read as "not flush" in the door close-ups.
+  const DOOR_LEFT_X = -0.84;
+  const DOOR_WIDTH = 1.89;
+  const DOOR_HEIGHT = 2.49;
+  const DOOR_Z = -0.4;
   const door = new THREE.Group();
-  door.position.set(-1.0, 0, 0);
+  door.position.set(DOOR_LEFT_X, 0, DOOR_Z);
   const leaf = new THREE.Mesh(
-    new THREE.BoxGeometry(1.9, 2.4, 0.09),
+    new THREE.BoxGeometry(DOOR_WIDTH, DOOR_HEIGHT, 0.09),
     new THREE.MeshStandardMaterial({ color: '#171310', roughness: 0.9 }),
   );
-  leaf.position.set(0.95, 1.2, 0);
+  leaf.position.set(DOOR_WIDTH / 2, DOOR_HEIGHT / 2, 0);
   door.add(leaf);
   scene.add(door);
 
@@ -473,18 +534,35 @@ export function buildWorld({ scene, models, grassCount = 0 }) {
   scene.add(interiorFillB);
 
   const chapelBox = new THREE.Box3().setFromObject(chapelRoot);
+  // Roofline for the crows to perch on. task-12 tried lowering this onto the
+  // roof and reverted after it appeared to get occluded — but that was a
+  // guessed y (chapelBox.max.y - 0.2 ≈ 17.8, near the TOWER's full height)
+  // that never actually reached the roof surface at all; it just floated in
+  // clear air well above the real ridge, which is why crows read as "too
+  // high and static" in review. A raycast probe against the live geometry
+  // found the actual pitched roof plane sits around y≈7–9.4 (sloping from
+  // ridge to eave) starting a bit past the entrance canopy — this raycasts
+  // straight down at each crow's real perch x (see crows.js) so every bird
+  // sits ON the roof surface, never inside or floating above it, however the
+  // model's roof pitch happens to run.
+  chapelRoot.updateMatrixWorld(true);
+  const roofFallbackY = chapelBox.max.y - 0.2;
+  const roofZ = chapelBox.min.z * 0.18; // past the porch overhang, onto the main roof pitch
+  function roofHeightAt(x) {
+    const raycaster = new THREE.Raycaster(
+      new THREE.Vector3(x, chapelBox.max.y + 10, roofZ),
+      new THREE.Vector3(0, -1, 0),
+      0,
+      40,
+    );
+    const hits = raycaster.intersectObject(chapelRoot, true);
+    return hits.length ? hits[0].point.y : roofFallbackY;
+  }
   return {
     chapelRoot,
     door,
     altarAnchor,
-    // task-12: tried dropping this onto the roof ridge for more silhouette
-    // contrast, but that put the perch point *inside* the pitched roof
-    // geometry at that z depth (occluded, confirmed by a close-range debug
-    // shot showing nothing where the previous position clearly showed
-    // birds) -- back to the clear-air position near the spire/cross tip,
-    // relying on the larger crow scale (see crows.js) for legibility
-    // instead of a lower, riskier perch height.
-    roofline: { y: chapelBox.max.y - 0.2, z: chapelBox.min.z * 0.25 },
+    roofline: { y: roofHeightAt(0), z: roofZ, heightAt: roofHeightAt },
   };
 }
 
