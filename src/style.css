@@ -187,7 +187,7 @@ body {
 /* ---------- no webgl: css-only layered mood ---------- */
 .no-webgl #scene { display: none; }
 .no-webgl #blackout { opacity: 0; }
-.no-webgl body, .no-webgl { background: var(--night); }
+.no-webgl { background: var(--night); }
 .no-webgl #hero {
   position: relative;
   height: 100vh;

@@ -64,12 +64,13 @@ function bootStatic() {
   gsap.ticker.add(tick);
 }
 
+if (prefersReduced) document.body.classList.add('reduced');
+
 if (new URLSearchParams(location.search).has('debug')) {
   debugScenes();
 } else if (!webglAvailable()) {
   document.body.classList.add('no-webgl');
 } else if (prefersReduced) {
-  document.body.classList.add('reduced');
   bootStatic();
 } else {
   boot();
