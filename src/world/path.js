@@ -32,9 +32,15 @@ export function positionAt(t) {
 
 // Look slightly ahead along the path; near the end, hold on the altar wall.
 export function targetAt(t) {
-  const ahead = Math.min(THREE.MathUtils.clamp(t, 0, 1) + 0.04, 1);
+  const tc = THREE.MathUtils.clamp(t, 0, 1);
+  const ahead = Math.min(tc + 0.04, 1);
   const p = curve.getPointAt(ahead);
   if (ahead === 1) p.z -= 2;
+  // Ease the look point upward on the final approach so the neon cross,
+  // mounted above eye height on the interior back wall, comes into frame
+  // instead of sitting just off the top edge when the camera is close.
+  const altarBias = THREE.MathUtils.clamp((tc - 0.85) / 0.15, 0, 1);
+  p.y += altarBias * 0.9;
   return p;
 }
 

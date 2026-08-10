@@ -3,3 +3,8 @@ dist
 .vercel
 .DS_Store
 assets/source/
+
+# AI agent skill installs (local tooling, not site source)
+.agents/skills/
+.claude/skills/
+skills-lock.json

@@ -16,7 +16,7 @@ export function createState() {
     crowT: 0,        // 0..1 crow-scatter progress
     candleT: 0,      // 0..1 candle ignition progress down the aisle
     swayAmp: 1,      // ambient camera sway multiplier
-    fog: 0.075,      // FogExp2 density
+    fog: 0.022,      // FogExp2 density
     fireflies: 0,    // firefly particle opacity
     crossGlow: 0,    // neon cross + altar light intensity
   };

@@ -32,10 +32,12 @@ export function createCrows({ scene, gltf, roofline, count }) {
         clipDuration = clip.duration;
         mixer.clipAction(clip).play();
       }
-      // Normalize to ~0.45m wingspan-ish scale.
+      // Sized to read clearly against the roofline silhouette from the
+      // approach path — small perching birds get lost in the fog at true
+      // scale, so this leans larger than a real crow.
       const box = new THREE.Box3().setFromObject(obj);
       const size = box.getSize(new THREE.Vector3());
-      obj.scale.setScalar(0.45 / Math.max(size.x, size.y, size.z));
+      obj.scale.setScalar(0.9 / Math.max(size.x, size.y, size.z));
     } else {
       // Fallback: a small dark cone reads as a bird silhouette in fog.
       obj = new THREE.Mesh(

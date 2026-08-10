@@ -35,7 +35,7 @@ export function buildTimeline(state) {
 
   // ACT 2 — APPROACH: the long walk; fog thickens; crows scatter mid-way.
   tl.to(state, { pathT: DOOR_FRONT_T, duration: approachEnd - approachStart, ease: 'power1.inOut' }, approachStart)
-    .to(state, { fog: 0.1, duration: approachEnd - approachStart }, approachStart)
+    .to(state, { fog: 0.04, duration: approachEnd - approachStart }, approachStart)
     .to(state, { swayAmp: 0.5, duration: approachEnd - approachStart }, approachStart)
     .to(state, { crowT: 1, duration: 0.14 }, 0.28);
 
@@ -45,7 +45,7 @@ export function buildTimeline(state) {
     .to('#glow', { opacity: 0, duration: 0.06 }, thresholdEnd - 0.06)
     .to(state, { pathT: DOOR_IN_T, duration: thresholdEnd - thresholdStart, ease: 'power1.in' }, thresholdStart)
     .to(state, { fireflies: 0, duration: 0.08 }, thresholdStart + 0.04)
-    .to(state, { fog: 0.05, duration: 0.08 }, thresholdEnd - 0.08);
+    .to(state, { fog: 0.028, duration: 0.08 }, thresholdEnd - 0.08);
 
   // ACT 4 — CHAPEL: down the aisle; candles ignite; the cross hums on.
   tl.to(state, { pathT: 0.97, duration: chapelEnd - chapelStart, ease: 'power1.out' }, chapelStart)

@@ -46,7 +46,7 @@ export function createCandles({ scene, altarAnchor, crossGltf, maxLights }) {
   if (crossGltf) {
     cross = crossGltf.scene;
     const box = new THREE.Box3().setFromObject(cross);
-    cross.scale.setScalar(2.2 / box.getSize(new THREE.Vector3()).y);
+    cross.scale.setScalar(1.7 / box.getSize(new THREE.Vector3()).y);
     cross.traverse((o) => {
       if (o.isMesh) o.material = new THREE.MeshBasicMaterial({ color: '#ff2318' });
     });
@@ -62,6 +62,17 @@ export function createCandles({ scene, altarAnchor, crossGltf, maxLights }) {
 
   const crossLight = new THREE.PointLight('#c1170f', 0, 22, 1.6);
   altarAnchor.add(crossLight);
+
+  if (typeof window !== 'undefined' && window.__DEBUG_CHAPEL__) {
+    altarAnchor.updateWorldMatrix(true, true);
+    const wb = new THREE.Box3().setFromObject(cross);
+    console.log('DEBUG_CROSS', JSON.stringify({
+      altarAnchorPos: altarAnchor.position.toArray(),
+      crossWorldBoxMin: wb.min.toArray(),
+      crossWorldBoxMax: wb.max.toArray(),
+      hasCrossGltf: !!crossGltf,
+    }));
+  }
 
   return {
     TOTAL,
@@ -85,6 +96,13 @@ export function createCandles({ scene, altarAnchor, crossGltf, maxLights }) {
       const flicker = 0.92 + 0.08 * Math.sin(elapsed * 30) * Math.sin(elapsed * 7.3);
       cross.visible = crossGlow > 0.01;
       crossLight.intensity = crossGlow * 14 * flicker;
+      if (typeof window !== 'undefined' && window.__DEBUG_CHAPEL__) {
+        window.__crossDebug = {
+          crossGlow, crossVisible: cross.visible, crossLightIntensity: crossLight.intensity,
+          crossWorldPos: cross.getWorldPosition(new THREE.Vector3()).toArray(),
+          litCandleCount: litIdx.length,
+        };
+      }
     },
   };
 }

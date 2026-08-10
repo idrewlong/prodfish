@@ -15,6 +15,7 @@ export function initScene({ canvas, state, tier, models }) {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, settings.dprCap));
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.8;
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color('#050607');
@@ -38,6 +39,43 @@ export function initScene({ canvas, state, tier, models }) {
 
   const post = createPost(renderer, scene, camera);
 
+  if (window.__DEBUG_CHAPEL__) {
+    window.__scene = scene;
+    window.__camera = camera;
+    window.__world = world;
+    const ancestorsVisible = (o) => {
+      let n = o;
+      while (n) {
+        if (!n.visible) return false;
+        n = n.parent;
+      }
+      return true;
+    };
+    window.__raycastNDC = (ndcX, ndcY) => {
+      const raycaster = new THREE.Raycaster();
+      raycaster.far = 60;
+      raycaster.setFromCamera(new THREE.Vector2(ndcX, ndcY), camera);
+      const hits = raycaster.intersectObjects(scene.children, true).filter((h) => ancestorsVisible(h.object));
+      if (!hits.length) return null;
+      const h = hits[0];
+      return { name: h.object.name || h.object.type, distance: h.distance, point: h.point.toArray() };
+    };
+    window.__raycastForward = () => {
+      const dir = new THREE.Vector3();
+      camera.getWorldDirection(dir);
+      const raycaster = new THREE.Raycaster(camera.position.clone(), dir, 0.05, 40);
+      const hits = raycaster.intersectObjects(scene.children, true);
+      return hits.slice(0, 8).map((h) => ({
+        name: h.object.name || h.object.type,
+        distance: h.distance,
+        point: h.point.toArray(),
+        material: h.object.material?.type,
+        color: h.object.material?.color?.getHexString?.(),
+        visible: h.object.visible,
+      }));
+    };
+  }
+
   window.addEventListener('resize', () => {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
@@ -51,7 +89,22 @@ export function initScene({ canvas, state, tier, models }) {
     const t = clock.getElapsedTime();
 
     // Camera rides the path; ambient sway layered on top so the scene
-    // breathes even when scroll is idle.
+    // breathes even when scroll is idle. __DEBUG_CHAPEL__ builds may set
+    // window.__camOverride = {pos:[x,y,z], look:[x,y,z]} to freely inspect
+    // geometry outside the path during calibration.
+    if (window.__DEBUG_CHAPEL__ && window.__camOverride) {
+      const { pos: p, look: lk } = window.__camOverride;
+      camera.position.set(p[0], p[1], p[2]);
+      camera.lookAt(lk[0], lk[1], lk[2]);
+      scene.fog.density = state.fog;
+      crows.update(state.crowT, t);
+      candles.update(state.candleT, state.crossGlow, t);
+      fireflies.material.uniforms.uTime.value = t;
+      fireflies.material.uniforms.uOpacity.value = state.fireflies;
+      post.setTime(t);
+      post.composer.render();
+      return;
+    }
     const pos = positionAt(state.pathT);
     camera.position.set(
       pos.x + Math.sin(t * 0.28) * 0.14 * state.swayAmp,
