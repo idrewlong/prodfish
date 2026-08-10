@@ -6,8 +6,12 @@ const FilmShader = {
   uniforms: {
     tDiffuse: { value: null },
     uTime: { value: 0 },
-    uGrain: { value: 0.09 },
-    uVignette: { value: 0.55 },
+    // task-12: was 0.09, tuned against a framebuffer that (pre gamma-fix)
+    // never actually reached midtone brightness so the grain barely showed.
+    // At correct exposure 0.09 reads as heavy static noise in a still frame;
+    // 0.045 keeps the film-grain texture without fighting "clearly readable."
+    uGrain: { value: 0.045 },
+    uVignette: { value: 0.35 },
     uCA: { value: 0.0015 },
   },
   vertexShader: /* glsl */ `
@@ -38,6 +42,26 @@ const FilmShader = {
       c.rgb *= mix(1.0, v, uVignette);
       c.rgb += (rand(vUv * (1.0 + fract(uTime))) - 0.5) * uGrain;
       gl_FragColor = c;
+      // ROOT CAUSE (task-12): RenderPass draws the scene into the
+      // composer's intermediate render target, whose color space is linear
+      // (not sRGB) -- three.js only auto-encodes to sRGB when the render
+      // target is the screen itself. Materials still tone-map correctly
+      // into that linear buffer, but this ShaderPass is the pass that
+      // finally writes to the screen, and a hand-written fragment shader
+      // gets none of three.js's automatic colorspace_fragment chunk
+      // injection (that only fires for shaders that explicitly reference
+      // it). Every prior "make it brighter" pass (moon 0.5 to 9, hemisphere
+      // 1.5 to 4, exposure up to 2.3) was fighting a missing gamma encode,
+      // not insufficient light: writing linear values straight into an
+      // sRGB-interpreted framebuffer displays as roughly value^2.2 -- e.g.
+      // a correctly-tuned 0.5 gray renders back at ~0.22, and the effect
+      // compounds hardest in shadows and midtones, exactly the "graveyard
+      // reads as a black void" complaint. linearToOutputTexel is already
+      // defined in every fragment shader three.js compiles (see
+      // WebGLProgram's unconditional getTexelEncodingFunction call) -- this
+      // is the same call the include-colorspace_fragment chunk makes,
+      // just invoked directly since this is a raw ShaderMaterial.
+      gl_FragColor = linearToOutputTexel(gl_FragColor);
     }
   `,
 };

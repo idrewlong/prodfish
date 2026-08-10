@@ -34,10 +34,38 @@ export function createCrows({ scene, gltf, roofline, count }) {
       }
       // Sized to read clearly against the roofline silhouette from the
       // approach path — small perching birds get lost in the fog at true
-      // scale, so this leans larger than a real crow.
+      // scale, so this leans larger than a real crow. task-12: bumped again
+      // (0.9 -> 1.6) after confirming via a close-range debug shot that the
+      // model itself renders correctly but was too small a silhouette to
+      // read at ~35-40m approach distance against the sky.
       const box = new THREE.Box3().setFromObject(obj);
       const size = box.getSize(new THREE.Vector3());
-      obj.scale.setScalar(0.9 / Math.max(size.x, size.y, size.z));
+      obj.scale.setScalar(1.6 / Math.max(size.x, size.y, size.z));
+      // task-12: the source GLB's material comes through with
+      // transparent=true; combined with an alpha channel that the
+      // compression pipeline (Task 4/5's meshoptimizer/KTX2 step) appears to
+      // have zeroed out, every crow rendered fully invisible against the sky
+      // regardless of scale or lighting — confirmed by dumping the live
+      // material (opacity:1, transparent:true, mapImage loaded fine, but
+      // nothing appeared on screen at the perch's correctly-projected screen
+      // coordinates). The birds are meant to read as solid silhouettes, not
+      // translucent, so force opaque rendering at runtime rather than
+      // depend on a broken per-pixel alpha channel.
+      // task-12: crows perch ~35-40m out at the roofline where FogExp2
+      // blends geometry color toward the fog/sky color (which is a similar
+      // dark navy to the crow's own near-black plumage) -- on top of the
+      // transparency bug above, this was crushing what little contrast the
+      // silhouette had left, even fully opaque and at a bumped scale.
+      // Exempting crows from fog keeps them a crisp dark silhouette against
+      // the sky/church at any distance, matching how the moon/hemisphere
+      // lights already let far graves and trees read through the fog.
+      obj.traverse((o) => {
+        if (o.isMesh && o.material) {
+          o.material.transparent = false;
+          o.material.depthWrite = true;
+          o.material.fog = false;
+        }
+      });
     } else {
       // Fallback: a small dark cone reads as a bird silhouette in fog.
       obj = new THREE.Mesh(

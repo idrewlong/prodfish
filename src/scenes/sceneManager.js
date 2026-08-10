@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { TIERS } from '../device.js';
 import { positionAt, targetAt } from '../world/path.js';
-import { buildWorld } from '../world/world.js';
+import { buildWorld, NIGHT_SKY } from '../world/world.js';
 import { createCrows } from '../world/crows.js';
 import { createCandles } from '../world/candles.js';
 import { doorAngle } from '../world/events.js';
@@ -11,19 +11,22 @@ import { createPost } from './post.js';
 export function initScene({ canvas, state, tier, models }) {
   const settings = TIERS[tier];
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, alpha: false });
-  renderer.setClearColor('#050607', 1);
+  renderer.setClearColor(NIGHT_SKY, 1);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, settings.dprCap));
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.8;
+  // task-12: previously boosted to 2.3 while fighting a missing gamma-encode
+  // bug in the post-processing final pass (see post.js) that made every
+  // light bump look ineffective. With that fixed, 1.4 is plenty.
+  renderer.toneMappingExposure = 1.4;
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color('#050607');
-  scene.fog = new THREE.FogExp2('#050607', state.fog);
+  scene.background = new THREE.Color(NIGHT_SKY);
+  scene.fog = new THREE.FogExp2(NIGHT_SKY, state.fog);
 
   const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 130);
 
-  const world = buildWorld({ scene, models });
+  const world = buildWorld({ scene, models, grassCount: settings.grass });
   const crows = createCrows({
     scene, gltf: models.crow, roofline: world.roofline, count: settings.crows,
   });

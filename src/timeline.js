@@ -34,7 +34,15 @@ export function buildTimeline(state) {
     .to('#hero', { opacity: 0, y: -70, duration: 0.08 }, arrivalEnd - 0.03);
 
   // ACT 2 — APPROACH: the long walk; fog thickens; crows scatter mid-way.
-  tl.to(state, { pathT: DOOR_FRONT_T, duration: approachEnd - approachStart, ease: 'power1.inOut' }, approachStart)
+  // Split in two so the tree-corridor stretch (roughly the first 65% of this
+  // act's scroll) drifts slowly and immersively, then the pace picks up for
+  // the final push to the door — arriving at DOOR_FRONT_T exactly at
+  // approachEnd either way, so downstream act boundaries are untouched.
+  const approachDuration = approachEnd - approachStart;
+  const corridorSplit = approachStart + approachDuration * 0.65;
+  const corridorPathT = 0.08 + (DOOR_FRONT_T - 0.08) * 0.42;
+  tl.to(state, { pathT: corridorPathT, duration: corridorSplit - approachStart, ease: 'sine.inOut' }, approachStart)
+    .to(state, { pathT: DOOR_FRONT_T, duration: approachEnd - corridorSplit, ease: 'power2.in' }, corridorSplit)
     .to(state, { fog: 0.04, duration: approachEnd - approachStart }, approachStart)
     .to(state, { swayAmp: 0.5, duration: approachEnd - approachStart }, approachStart)
     .to(state, { crowT: 1, duration: 0.14 }, 0.28);
