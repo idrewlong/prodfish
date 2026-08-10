@@ -5,6 +5,7 @@
   --night: #050607;
   --serif: "Cormorant Garamond", serif;
   --mono: "IBM Plex Mono", monospace;
+  --blackletter: "UnifrakturMaguntia", serif;
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -74,11 +75,11 @@ body.ready #loading { opacity: 0; pointer-events: none; }
   text-align: center;
 }
 #hero h1 {
-  font-family: var(--serif);
+  font-family: var(--blackletter);
   font-weight: 400;
-  font-size: clamp(3rem, 9vw, 7rem);
-  letter-spacing: 0.35em;
-  margin-left: 0.35em; /* optically recenter tracked text */
+  font-size: clamp(4.5rem, 14vw, 11rem);
+  letter-spacing: 0.08em;
+  margin-left: 0.08em; /* optically recenter tracked text */
   color: var(--bone);
   text-shadow: 0 0 40px rgba(216, 211, 200, 0.25);
 }
