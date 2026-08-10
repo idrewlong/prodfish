@@ -23,6 +23,17 @@ function makeGlowTexture() {
   return tex;
 }
 
+// Candle z placement: first candle just inside the door, spaced back toward
+// the altar. Shared by the placement loop below and the camera-proximity
+// ignition math in update() -- kept as named constants (not re-derived) so
+// the two stay in sync by construction.
+const CANDLE_Z0 = -2.6;
+const CANDLE_Z_SPAN = 7.4;
+// fix-round: ignite ~2m before the camera actually reaches each candle, so
+// it's visibly catching light as it comes into frame rather than the
+// instant the camera is beside it.
+const CANDLE_LEAD = 2.0;
+
 // Candle rows flank the aisle (x = ±0.9) from just inside the door to the
 // altar. Flames are camera-facing additive sprites; a small pool of real
 // point lights follows the most recently lit candles so low tiers stay
@@ -41,7 +52,7 @@ export function createCandles({ scene, altarAnchor, crossGltf, maxLights }) {
 
   for (let i = 0; i < TOTAL; i++) {
     const side = i % 2 === 0 ? -1 : 1;
-    const z = -2.6 - (i / TOTAL) * 7.4;
+    const z = CANDLE_Z0 - (i / TOTAL) * CANDLE_Z_SPAN;
     const g = new THREE.Group();
     const wax = new THREE.Mesh(
       new THREE.CylinderGeometry(0.035, 0.045, 0.28, 8),
@@ -50,16 +61,20 @@ export function createCandles({ scene, altarAnchor, crossGltf, maxLights }) {
     wax.position.y = 0.14;
     // Flame + a larger, softer halo behind it so the candle reads as a
     // small glowing pool from aisle distance, not just a thin sliver.
+    // fix-round: bumped again (0.22x0.3 -> 0.3x0.42, 0.75 -> 0.95) -- still
+    // camera-facing sprites so they never foreshorten, just a bigger, more
+    // insistent glow now that ignition timing (see update()) actually keeps
+    // them in view as they light.
     const flame = new THREE.Sprite(flameMat.clone());
-    flame.scale.set(0.22, 0.3, 1);
+    flame.scale.set(0.3, 0.42, 1);
     flame.position.y = 0.37;
     const halo = new THREE.Sprite(flameMat.clone());
-    halo.scale.set(0.75, 0.75, 1);
+    halo.scale.set(0.95, 0.95, 1);
     halo.position.y = 0.37;
     g.add(wax, flame, halo);
     g.position.set(side * 0.9, 0.55, z); // on low pew-end stands
     scene.add(g);
-    candles.push({ flame, halo });
+    candles.push({ flame, halo, z });
   }
 
   // Shared light pool.
