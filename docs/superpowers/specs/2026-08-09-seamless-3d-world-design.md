@@ -16,7 +16,10 @@ world, and assets animate as you pass them.
 
 - **Full seamless 3D world** (user's choice), with a defined fallback to a
   one-cut variant if the church interior proves unusable up close.
-- **Free CC0/CC-BY assets** from Sketchfab and similar libraries. No
+- **Hybrid asset sourcing.** Free CC0/CC-BY library assets for proven, rigged,
+  or animated pieces (the chapel with interior, the animated crow); Higgsfield
+  AI-generated GLBs (via `higgsfield-generate`) for hero set-dressing that must
+  match the existing art direction (neon cross, gravestones, dead trees). No
   NonCommercial licenses — the site promotes beat sales, which is commercial
   use.
 - **Keep the five-act journey**, plus two new scroll beats: crows scattering
@@ -81,14 +84,25 @@ sway (existing) stays layered on top of the path position.
 
 ## Assets pipeline & licensing
 
-- GLBs downloaded to `assets/source/`, processed with `gltf-transform`
+- Two sources, one pipeline:
+  - **Library assets** (chapel, crow): downloaded from Sketchfab, CC0/CC-BY
+    only.
+  - **Higgsfield-generated assets** (neon cross, gravestones, dead trees):
+    generated as GLBs via `higgsfield-generate`, prompted from the existing
+    scene imagery in `assets/PROMPTS.md` for art-direction consistency. Each
+    generated asset is inspected for triangle count and broken
+    geometry before acceptance; a library or primitive-built fallback is
+    noted per asset in the plan.
+- GLBs land in `assets/source/`, processed with `gltf-transform`
   (Draco compression, texture resize) into `public/models/`.
 - Loaded via `GLTFLoader` + `DRACOLoader`; loading screen until the chapel
   and ground are ready, distant props may stream in after.
 - `ATTRIBUTIONS.md` at repo root listing every asset, author, source URL,
   and license; a small "credits" link in the site footer satisfies CC-BY
-  attribution on-site.
-- License rule: CC0 or CC-BY only. Record the license at download time.
+  attribution on-site. Higgsfield-generated assets are recorded there too
+  (as generated works, no attribution requirement).
+- License rule for library assets: CC0 or CC-BY only. Record the license at
+  download time.
 
 ## Performance & tiers
 
@@ -132,4 +146,5 @@ this pivot swaps one segment, not the architecture.
 
 - Sound, pointer-driven camera look, WebXR, physics.
 - Replacing the beats/socials section or hero copy.
-- AI-generated 3D assets (revisit only if library assets fail).
+- AI-generating the chapel or animated creatures (library assets only for
+  those; Higgsfield 3D is limited to static set-dressing).
