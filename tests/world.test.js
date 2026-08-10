@@ -11,8 +11,8 @@ describe('PROP_SPOTS', () => {
       expect(z).toBeGreaterThan(1);
     }
   });
-  it('has enough set dressing to read as a graveyard', () => {
-    expect(PROP_SPOTS.graves.length).toBeGreaterThanOrEqual(8);
-    expect(PROP_SPOTS.trees.length).toBeGreaterThanOrEqual(5);
+  it('has enough set dressing to read as a dense graveyard', () => {
+    expect(PROP_SPOTS.graves.length).toBeGreaterThanOrEqual(18);
+    expect(PROP_SPOTS.trees.length).toBeGreaterThanOrEqual(9);
   });
 });

@@ -1,6 +1,6 @@
 export const TIERS = {
-  low:  { particles: 60,  dprCap: 1.5, candleLights: 2, crows: 3 },
-  high: { particles: 140, dprCap: 2,   candleLights: 6, crows: 5 },
+  low:  { particles: 60,  dprCap: 1.5, candleLights: 2, crows: 3, grass: 350 },
+  high: { particles: 140, dprCap: 2,   candleLights: 6, crows: 5, grass: 1000 },
 };
 
 export function deviceTier({ isMobileUA = false, memory, cores } = {}) {

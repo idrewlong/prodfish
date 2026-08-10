@@ -26,11 +26,13 @@ describe('TIERS', () => {
       expect(TIERS[t].dprCap).toBeGreaterThan(0);
       expect(TIERS[t].candleLights).toBeGreaterThan(0);
       expect(TIERS[t].crows).toBeGreaterThan(0);
+      expect(TIERS[t].grass).toBeGreaterThan(0);
     }
   });
   it('low tier is lighter than high tier', () => {
     expect(TIERS.low.particles).toBeLessThan(TIERS.high.particles);
     expect(TIERS.low.candleLights).toBeLessThan(TIERS.high.candleLights);
     expect(TIERS.low.crows).toBeLessThanOrEqual(TIERS.high.crows);
+    expect(TIERS.low.grass).toBeLessThan(TIERS.high.grass);
   });
 });

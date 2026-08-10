@@ -1,18 +1,39 @@
 import * as THREE from 'three';
-import { positionAt } from './path.js';
+import { positionAt, T_DOOR } from './path.js';
+
+// Night sky/fog tone, shared with sceneManager.js. Deliberately NOT applied
+// through ACES Filmic tone mapping for the sky dome below: at the exposure
+// needed to make the graveyard/church legible (2.3), tone mapping's shadow
+// "toe" crushes any near-black background color to true (0,0,0) — the void
+// read as pitch-black in every approach screenshot regardless of how bright
+// this constant was set. The dome sidesteps that by disabling toneMapped on
+// its material, so the sky reads as a lit, hazy navy night rather than an
+// empty black hole above the lit ground.
+export const NIGHT_SKY = '#141d30';
 
 // Hand-placed prop spots [x, z, rotY, scale] flanking the path's S-curve.
 // Deterministic (no Math.random) so the corridor-clearance test is real.
 export const PROP_SPOTS = {
+  // Ghost-Rider-graveyard density: a near flanking row hugging the road plus
+  // a second row set further back, so the approach reads as a dense field of
+  // leaning stones receding into the fog rather than scattered set dressing.
   graves: [
+    // near row (original 10)
     [-3.2, 34, 0.3, 1], [3.6, 31, -0.2, 0.9], [-2.8, 27, 0.8, 1.1],
     [4.2, 24, -0.5, 1], [-4.5, 21, 0.1, 0.85], [3.4, 17, 0.6, 1],
     [-3.0, 14, -0.4, 0.95], [3.8, 12, 0.2, 1.05], [-3.6, 8.5, -0.7, 1],
     [3.1, 6.5, 0.4, 0.9],
+    // near row, extended further out toward the misty horizon
+    [-3.4, 41, 0.5, 1], [3.9, 38, -0.3, 0.95],
+    // far row, set back beyond the trees for depth
+    [-6.0, 33, 0.2, 1], [6.4, 29.5, -0.6, 0.9], [-5.8, 25.5, 0.9, 1.05],
+    [6.6, 22.5, -0.1, 0.85], [-6.2, 19, 0.4, 1], [6.0, 15.5, -0.5, 0.95],
+    [-5.6, 10.5, 0.3, 1], [5.9, 7.5, -0.4, 0.9],
   ],
   trees: [
     [-6.5, 38, 0, 1.1], [7, 33, 1.2, 1], [-7.5, 26, 2.1, 0.9],
     [6.8, 20, 0.4, 1.2], [-6.2, 13, 2.8, 1], [7.2, 8, 1.7, 0.95],
+    [7.8, 43, 0.9, 1], [-8.0, 30, 1.5, 0.95], [7.5, 16, 2.3, 1.05], [-6.8, 5.5, 0.6, 0.9],
   ],
 };
 
@@ -70,6 +91,164 @@ const CHAPEL_TARGET_HEIGHT = 18;
 // no-op) in case a future model swap needs it. See task-12-report.md.
 const CHAPEL_Z_STRETCH = 1;
 
+// A long-abandoned dirt road ribbon, hugging the camera path from the field
+// (path start) up to the church door. Built from sampled path points offset
+// perpendicular to the direction of travel; width wanders deterministically
+// (sine-based, no Math.random) so the edges read as worn/irregular rather
+// than a crisp paved band, with occasional narrow "washed-out" patches.
+function buildRoad(scene) {
+  const steps = 90;
+  const endT = Math.min(T_DOOR - 0.015, 0.98); // stop just shy of the doorway
+  const baseWidth = 2.2;
+  const up = new THREE.Vector3(0, 1, 0);
+  const positions = [];
+  const indices = [];
+  let vi = 0;
+  for (let i = 0; i <= steps; i++) {
+    const t = (endT * i) / steps;
+    const p = positionAt(t);
+    const ahead = positionAt(Math.min(t + 0.004, 1));
+    const tangent = new THREE.Vector3().subVectors(ahead, p).normalize();
+    const perp = new THREE.Vector3().crossVectors(up, tangent).normalize();
+    const wobble = Math.sin(i * 0.7) * 0.35 + Math.sin(i * 0.23 + 1.3) * 0.2;
+    const wornPatch = Math.sin(i * 0.31) > 0.85 ? 0.4 : 1; // rare thin/broken stretch
+    const halfW = Math.max(0.22, (baseWidth + wobble) * wornPatch) / 2;
+    const left = p.clone().addScaledVector(perp, -halfW);
+    const right = p.clone().addScaledVector(perp, halfW);
+    left.y = 0.012;
+    right.y = 0.012;
+    positions.push(left.x, left.y, left.z, right.x, right.y, right.z);
+    if (i > 0) {
+      const a = vi - 2;
+      const b = vi - 1;
+      const c = vi;
+      const d = vi + 1;
+      indices.push(a, b, c, b, d, c);
+    }
+    vi += 2;
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geo.setIndex(indices);
+  geo.computeVertexNormals();
+  const mat = new THREE.MeshStandardMaterial({ color: '#5a4530', roughness: 1, side: THREE.DoubleSide });
+  const road = new THREE.Mesh(geo, mat);
+  road.name = 'roadRibbon';
+  scene.add(road);
+}
+
+// Small deterministic PRNG (LCG) so grass placement is stable frame-to-frame
+// and across reloads — Math.random() would reshuffle every build, making the
+// "avoid the path corridor" clearance impossible to reason about or test.
+function makeLcg(seed) {
+  let s = seed >>> 0;
+  return () => {
+    s = (Math.imul(s, 1664525) + 1013904223) >>> 0;
+    return s / 4294967296;
+  };
+}
+
+// One instanced "cross quad" tuft geometry: two vertical planes intersecting
+// at right angles through the Y axis, base pinned at y=0. Cheaper than a
+// billboard sprite per tuft (no per-frame camera-facing math) while still
+// reading as volumetric grass from most viewing angles.
+function buildGrassBladeGeometry() {
+  const w = 0.5;
+  const h = 0.7;
+  const positions = new Float32Array([
+    -w / 2, 0, 0, w / 2, 0, 0, w / 2, h, 0, -w / 2, h, 0,
+    0, 0, -w / 2, 0, 0, w / 2, 0, h, w / 2, 0, h, -w / 2,
+  ]);
+  const uvs = new Float32Array([0, 0, 1, 0, 1, 1, 0, 1, 0, 0, 1, 0, 1, 1, 0, 1]);
+  const index = [0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7];
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geo.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+  geo.setIndex(index);
+  geo.computeVertexNormals();
+  return geo;
+}
+
+// Procedural canvas texture of a few grass blades, desaturated gray-green to
+// match the near-dead Ghost-Rider-graveyard field rather than healthy lawn.
+function makeGrassTexture() {
+  const size = 32;
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, size, size);
+  const shades = ['#2a2f22', '#333a28', '#242a1c', '#3a4130'];
+  for (let i = 0; i < 7; i++) {
+    const bx = ((i + 0.5) / 7) * size + Math.sin(i * 3.1) * 2.5;
+    ctx.strokeStyle = shades[i % shades.length];
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.moveTo(bx, size);
+    ctx.quadraticCurveTo(bx + Math.sin(i) * 3, size * 0.5, bx + Math.sin(i * 1.7) * 4, 1);
+    ctx.stroke();
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+  return tex;
+}
+
+// Tall unkempt grass tufts scattered across the field/graveyard, avoiding
+// the dirt road corridor (>=1.2m clearance) so the path stays legible, and
+// weighted denser around the grave spots per the Ghost-Rider reference.
+function buildGrass(scene, count) {
+  if (!count) return;
+  const rand = makeLcg(0x9e3779b1);
+  const pathSamples = [];
+  for (let i = 0; i <= 80; i++) pathSamples.push(positionAt(i / 80));
+  const graveXZ = PROP_SPOTS.graves.map(([x, z]) => [x, z]);
+
+  const geo = buildGrassBladeGeometry();
+  const mat = new THREE.MeshBasicMaterial({
+    map: makeGrassTexture(),
+    color: '#8a9070',
+    transparent: true,
+    alphaTest: 0.35,
+    side: THREE.DoubleSide,
+  });
+  const mesh = new THREE.InstancedMesh(geo, mat, count);
+  mesh.name = 'grassField';
+  const dummy = new THREE.Object3D();
+  const clusterCount = Math.floor(count * 0.45);
+  let placed = 0;
+  let attempts = 0;
+  const maxAttempts = count * 25;
+  while (placed < count && attempts < maxAttempts) {
+    attempts++;
+    let x;
+    let z;
+    if (placed < clusterCount) {
+      const g = graveXZ[Math.floor(rand() * graveXZ.length)];
+      x = g[0] + (rand() - 0.5) * 4.5;
+      z = g[1] + (rand() - 0.5) * 4.5;
+    } else {
+      x = (rand() - 0.5) * 20;
+      z = 2 + rand() * 44;
+    }
+    let minD = Infinity;
+    for (const p of pathSamples) {
+      const d = Math.hypot(p.x - x, p.z - z);
+      if (d < minD) minD = d;
+      if (minD < 1.2) break;
+    }
+    if (minD < 1.2) continue;
+    const bladeH = 0.4 + rand() * 0.5;
+    dummy.position.set(x, 0, z);
+    dummy.rotation.set(0, rand() * Math.PI * 2, 0);
+    dummy.scale.set(0.85 + rand() * 0.3, bladeH / 0.7, 0.85 + rand() * 0.3);
+    dummy.updateMatrix();
+    mesh.setMatrixAt(placed, dummy.matrix);
+    placed++;
+  }
+  mesh.count = placed;
+  mesh.instanceMatrix.needsUpdate = true;
+  scene.add(mesh);
+}
+
 function place(scene, template, spots) {
   for (const [x, z, rotY, s] of spots) {
     const obj = template.clone(true);
@@ -117,22 +296,61 @@ function normalize(gltfScene, targetHeight, centerMatch) {
   return root;
 }
 
-export function buildWorld({ scene, models }) {
+export function buildWorld({ scene, models, grassCount = 0 }) {
+  // Sky dome: un-tonemapped so it stays a legible hazy navy instead of
+  // crushing to black (see NIGHT_SKY comment above). Radius sits inside the
+  // camera's far plane (130) and fog:false keeps it a flat, un-hazed backdrop
+  // — real ground fog thickens near the horizon, not the open sky above it.
+  const sky = new THREE.Mesh(
+    new THREE.SphereGeometry(115, 16, 12),
+    new THREE.MeshBasicMaterial({ color: NIGHT_SKY, side: THREE.BackSide, fog: false, toneMapped: false }),
+  );
+  sky.name = 'skyDome';
+  scene.add(sky);
+
   // Ground: a big dark disc; fog swallows the edge.
   const ground = new THREE.Mesh(
     new THREE.CircleGeometry(90, 48),
-    new THREE.MeshStandardMaterial({ color: '#070a08', roughness: 1 }),
+    // ACES Filmic tone mapping crushes low-albedo colors hard toward black
+    // (its shadow "toe"), so a ground plane dark enough to look right on
+    // paper renders as near-invisible once lit and tone-mapped — bumped
+    // notably lighter than a literal dead-grass color would suggest so it
+    // actually reads under the moon/hemisphere lighting. DoubleSide as a
+    // safety net: `rotation.x = Math.PI / 2` below was previously the
+    // negated sign, which (verified via the mesh's actual world matrix)
+    // left the disc's normal facing *down* — invisible to every camera in
+    // the scene, since they all sit above y=0. That's the root cause the
+    // ground (and the dirt road riding on top of it) never showed up in
+    // any screenshot regardless of light/exposure tuning.
+    new THREE.MeshStandardMaterial({ color: '#3a4132', roughness: 1, side: THREE.DoubleSide }),
   );
-  ground.rotation.x = -Math.PI / 2;
+  ground.rotation.x = Math.PI / 2;
   scene.add(ground);
 
+  buildRoad(scene);
+  buildGrass(scene, grassCount);
+
   // Moonlight from behind the chapel + a hemisphere fill so silhouettes read
-  // in the fog without flattening the southern-gothic near-dark mood. Pushed
-  // notably brighter in task-12 after repeated screenshot feedback that the
-  // graveyard, trees, and church were all too dark to read.
-  const moon = new THREE.DirectionalLight('#b9c4d6', 5.5);
+  // in the fog without flattening the southern-gothic near-dark mood.
+  //
+  // task-12: earlier rounds pushed these to extreme values (moon 9,
+  // hemisphere 4, exposure 2.3) chasing "still too dark" feedback that
+  // turned out to be a missing sRGB-encode step in the post-processing
+  // final pass (see the fix + explanation in scenes/post.js) — every light
+  // bump was fighting a bug that gamma-crushed the final framebuffer, not
+  // actual insufficient light. With that fixed, values close to the
+  // original brief's targets read correctly again.
+  const moon = new THREE.DirectionalLight('#b9c4d6', 3.5);
   moon.position.set(-6, 18, -30);
-  scene.add(moon, new THREE.HemisphereLight('#3a4a5f', '#1a140f', 2.4));
+  scene.add(moon, new THREE.HemisphereLight('#4a5c78', '#241c14', 1.6));
+
+  // A second moon-toned fill from behind the camera's approach, so the
+  // graveyard/tree silhouettes catch light from the front too, not just a
+  // single backlit rim — without this the near-black stone/bark GLB
+  // materials read as flat cutouts against the fog.
+  const approachFill = new THREE.DirectionalLight('#c7d2e6', 1.4);
+  approachFill.position.set(4, 12, 40);
+  scene.add(approachFill);
 
   // Chapel: scaled to CHAPEL_TARGET_HEIGHT, doorway on the z=0 plane facing +z.
   // If the model is somehow null (dev only), a box shell keeps the world testable.
@@ -210,7 +428,7 @@ export function buildWorld({ scene, models }) {
 
   // Red light bleeding through the doorway from inside, placed at the
   // reveal depth (the recessed inner wall plane, not the outer face).
-  const doorGlow = new THREE.PointLight('#c1170f', 10, 11, 2);
+  const doorGlow = new THREE.PointLight('#c1170f', 5, 11, 2);
   doorGlow.position.set(0, 1.8, -1.6);
   scene.add(doorGlow);
 
@@ -229,9 +447,16 @@ export function buildWorld({ scene, models }) {
   // interior back wall (just in front of it, facing the aisle) rather than a
   // hardcoded guess — derived from the actual (post-alignment) chapel bbox
   // so it tracks CHAPEL_Z_STRETCH and any future model swap.
+  // chapelBox.min.z is the deepest point of the WHOLE bbox (a buttress or
+  // uneven apse detail off the aisle centerline can drag this well behind
+  // the actual flat wall surface the camera faces) — task-12 raycast probes
+  // straight down the aisle found the real wall surface at the altar's x/y
+  // sitting ~0.9m in front of that overall min, so 0.35m of margin left the
+  // cross embedded inside solid wall geometry (invisible, z-fighting).
+  // 1.3m clears it with room to spare.
   const interiorBack = new THREE.Box3().setFromObject(chapelRoot).min.z;
   const altarAnchor = new THREE.Object3D();
-  altarAnchor.position.set(0, 2.6, interiorBack + 0.35);
+  altarAnchor.position.set(0, 2.6, interiorBack + 1.3);
   scene.add(altarAnchor);
 
   // Always-on, dim interior fill: the moon/hemisphere read the exterior and
@@ -240,10 +465,10 @@ export function buildWorld({ scene, models }) {
   // as far as scene lighting is concerned, since the walls block the
   // exterior lights' contribution once inside. Two soft warm pools, roughly
   // mid-aisle and at the altar, keep pews and the far wall just legible.
-  const interiorFillA = new THREE.PointLight('#5a4636', 3.2, 9, 2);
+  const interiorFillA = new THREE.PointLight('#5a4636', 1.6, 9, 2);
   interiorFillA.position.set(0, 3.2, interiorBack * 0.4);
   scene.add(interiorFillA);
-  const interiorFillB = new THREE.PointLight('#5a4636', 2.6, 8, 2);
+  const interiorFillB = new THREE.PointLight('#5a4636', 1.3, 8, 2);
   interiorFillB.position.set(0, 3, interiorBack + 2.5);
   scene.add(interiorFillB);
 
@@ -252,6 +477,13 @@ export function buildWorld({ scene, models }) {
     chapelRoot,
     door,
     altarAnchor,
+    // task-12: tried dropping this onto the roof ridge for more silhouette
+    // contrast, but that put the perch point *inside* the pitched roof
+    // geometry at that z depth (occluded, confirmed by a close-range debug
+    // shot showing nothing where the previous position clearly showed
+    // birds) -- back to the clear-air position near the spire/cross tip,
+    // relying on the larger crow scale (see crows.js) for legibility
+    // instead of a lower, riskier perch height.
     roofline: { y: chapelBox.max.y - 0.2, z: chapelBox.min.z * 0.25 },
   };
 }
