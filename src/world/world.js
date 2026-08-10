@@ -462,21 +462,28 @@ export function buildWorld({ scene, models, grassCount = 0 }) {
   scene.add(chapelRoot);
 
   // Our own hinged door in the doorway plane, hinge on the left jamb. Sized
-  // and positioned to the ACTUAL modeled opening — measured by raycasting
-  // the live chapel geometry (a horizontal sweep at eye height for the
-  // left/right jamb, a sweep at x=0 for the floor/lintel) rather than an
-  // eyeballed guess: the opening spans x=[-0.84, 1.05] (width 1.89m),
-  // y=[0, 2.49m]. The facade's outer face — where the leaf must sit flush,
-  // NOT the path's z=0 threshold landmark — is always exactly z=-0.4 by
-  // construction: chapelRoot is pushed back by `box.max.z + 0.4` above, so
-  // the post-push-back facade's max.z is always -0.4 regardless of model
-  // size. The previous leaf (positioned at z=0, x=[-1.0, 0.9]) floated 0.4m
-  // in front of the real wall and left a ~0.15m gap at the right/latch jamb
-  // — this is what read as "not flush" in the door close-ups.
+  // and positioned to the ACTUAL modeled opening.
+  //
+  // fix-round: the previous alignment pass (task-12) measured the opening's
+  // width/height correctly but got the DEPTH wrong. It found x=[-0.84,1.05],
+  // y=[0,2.49] via a raycast sweep at eye height and assumed the facade's
+  // flat outer face (z=-0.4, exactly `box.max.z` after chapelRoot's
+  // push-back — see above) was also where the door hole sits. It isn't: this
+  // portal is a stepped/splayed Gothic reveal, not a flat cut. A full vertex
+  // scan of the facade mesh (igreja_partespCube12_igreja_estrutura_0) in the
+  // door region found the jamb steps inward through two intermediate planes
+  // (z=-0.78, z=-1.14, z=-1.82) before reaching the actual rectangular
+  // door-shaped hole — whose jamb AND lintel vertices cluster tightly at
+  // x=[-0.837,1.046], y=[0,2.49], z=-2.01. That z is the real door plane:
+  // the leaf was floating 1.6m in front of it, flush with the outer
+  // pilasters instead of recessed under the portal canopy where a door
+  // actually belongs — which is exactly what still read as "misaligned"
+  // from the real scroll/camera-sway viewpoint even though the width/height
+  // numbers were already correct.
   const DOOR_LEFT_X = -0.84;
   const DOOR_WIDTH = 1.89;
   const DOOR_HEIGHT = 2.49;
-  const DOOR_Z = -0.4;
+  const DOOR_Z = -2.01;
   const door = new THREE.Group();
   door.position.set(DOOR_LEFT_X, 0, DOOR_Z);
   const leaf = new THREE.Mesh(
@@ -487,10 +494,13 @@ export function buildWorld({ scene, models, grassCount = 0 }) {
   door.add(leaf);
   scene.add(door);
 
-  // Red light bleeding through the doorway from inside, placed at the
-  // reveal depth (the recessed inner wall plane, not the outer face).
+  // Red light bleeding through the doorway from inside. Was placed between
+  // the old (wrong) door plane and the wall's outer face; now that the door
+  // sits at the true recessed plane (z=-2.01), the glow needs to sit further
+  // inside it (more negative z) so it still reads as spilling out from the
+  // nave through the gap as the door swings, not from in front of the door.
   const doorGlow = new THREE.PointLight('#c1170f', 5, 11, 2);
-  doorGlow.position.set(0, 1.8, -1.6);
+  doorGlow.position.set(0, 1.8, -2.9);
   scene.add(doorGlow);
 
   // Set dressing, real GLB or silhouette.

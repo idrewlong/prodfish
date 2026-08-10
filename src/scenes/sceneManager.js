@@ -48,6 +48,7 @@ export function initScene({ canvas, state, tier, models }) {
     window.__scene = scene;
     window.__camera = camera;
     window.__world = world;
+    window.__state = state;
     const ancestorsVisible = (o) => {
       let n = o;
       while (n) {
