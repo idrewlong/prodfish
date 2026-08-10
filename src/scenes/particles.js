@@ -32,9 +32,9 @@ export function createFireflies(count) {
   const scale = new Float32Array(count);
   const phase = new Float32Array(count);
   for (let i = 0; i < count; i++) {
-    pos[i * 3] = (Math.random() - 0.5) * 14;      // x across the field
-    pos[i * 3 + 1] = -4 + Math.random() * 4;      // y: grass height band
-    pos[i * 3 + 2] = 1 + Math.random() * 9;       // z: between camera start and church
+    pos[i * 3] = (Math.random() - 0.5) * 22;      // x across the field
+    pos[i * 3 + 1] = 0.3 + Math.random() * 1.6;   // y: grass height band
+    pos[i * 3 + 2] = 6 + Math.random() * 38;      // z: along the approach
     scale[i] = 0.5 + Math.random();
     phase[i] = Math.random();
   }
