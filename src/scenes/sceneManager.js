@@ -39,6 +39,10 @@ export function initScene({ canvas, state, tier }) {
 
   function setTextures(name, colorTex, depthTex) {
     colorTex.colorSpace = THREE.SRGBColorSpace;
+    const img = colorTex.image;
+    if (img && img.width && img.height) {
+      planes[name].scale.x = img.width / img.height;
+    }
     const u = planes[name].material.uniforms;
     u.uMap.value = colorTex;
     u.uDepth.value = depthTex;

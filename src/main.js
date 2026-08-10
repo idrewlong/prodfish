@@ -1,9 +1,9 @@
-import * as THREE from 'three';
 import { gsap } from 'gsap';
 import { createState } from './choreography.js';
 import { detectTier } from './device.js';
 import { initScene } from './scenes/sceneManager.js';
 import { makeExterior, makeThreshold, makeInterior } from './scenes/placeholders.js';
+import { loadSceneTextures } from './scenes/loader.js';
 import { initScroll } from './scroll.js';
 import { buildTimeline } from './timeline.js';
 
@@ -34,9 +34,11 @@ function boot() {
   const tier = detectTier();
   const app = initScene({ canvas: document.getElementById('scene'), state, tier });
 
-  const sources = { exterior: makeExterior(), threshold: makeThreshold(), interior: makeInterior() };
-  for (const [name, { color, depth }] of Object.entries(sources)) {
-    app.setTextures(name, new THREE.CanvasTexture(color), new THREE.CanvasTexture(depth));
+  const makers = { exterior: makeExterior, threshold: makeThreshold, interior: makeInterior };
+  for (const [name, make] of Object.entries(makers)) {
+    loadSceneTextures(name, make).then(({ colorTex, depthTex }) => {
+      app.setTextures(name, colorTex, depthTex);
+    });
   }
 
   initScroll();
@@ -51,9 +53,11 @@ function bootStatic() {
   state.exteriorOpacity = 1;
   state.fog = 0.25;
   const app = initScene({ canvas: document.getElementById('scene'), state, tier: 'low' });
-  const sources = { exterior: makeExterior(), threshold: makeThreshold(), interior: makeInterior() };
-  for (const [name, { color, depth }] of Object.entries(sources)) {
-    app.setTextures(name, new THREE.CanvasTexture(color), new THREE.CanvasTexture(depth));
+  const makers = { exterior: makeExterior, threshold: makeThreshold, interior: makeInterior };
+  for (const [name, make] of Object.entries(makers)) {
+    loadSceneTextures(name, make).then(({ colorTex, depthTex }) => {
+      app.setTextures(name, colorTex, depthTex);
+    });
   }
   // render a few frames so textures upload, then stop
   let frames = 0;
