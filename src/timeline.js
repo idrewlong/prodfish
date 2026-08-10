@@ -12,7 +12,10 @@ export function buildTimeline(state) {
       trigger: '#scroll-track',
       start: 'top top',
       end: 'bottom bottom',
-      scrub: 1.2,
+      // fix-round: 1.2 -> 2 -- extra scrub lag smooths out residual scroll
+      // jitter now that the approach pathT tween below is a single gentle
+      // ease instead of two tweens with an accelerating tail.
+      scrub: 2,
     },
   });
 
@@ -34,15 +37,18 @@ export function buildTimeline(state) {
     .to('#hero', { opacity: 0, y: -70, duration: 0.08 }, arrivalEnd - 0.03);
 
   // ACT 2 — APPROACH: the long walk; fog thickens; crows scatter mid-way.
-  // Split in two so the tree-corridor stretch (roughly the first 65% of this
-  // act's scroll) drifts slowly and immersively, then the pace picks up for
-  // the final push to the door — arriving at DOOR_FRONT_T exactly at
-  // approachEnd either way, so downstream act boundaries are untouched.
-  const approachDuration = approachEnd - approachStart;
-  const corridorSplit = approachStart + approachDuration * 0.65;
-  const corridorPathT = 0.08 + (DOOR_FRONT_T - 0.08) * 0.42;
-  tl.to(state, { pathT: corridorPathT, duration: corridorSplit - approachStart, ease: 'sine.inOut' }, approachStart)
-    .to(state, { pathT: DOOR_FRONT_T, duration: approachEnd - corridorSplit, ease: 'power2.in' }, corridorSplit)
+  // fix-round: previously split into a slow tree-corridor tween (first 65%
+  // of this act's scroll) followed by a `power2.in`-eased sprint for the
+  // final 35% -- power2.in is slow-start-fast-end, and because that segment
+  // was ALSO squeezed into a small slice of scroll, its fast end produced a
+  // violent camera lurch right at the church (confirmed via screenshots:
+  // 40% scroll shows the church small and distant, 45% shows the camera
+  // point-blank at the door -- a whiplash jump, not a walk). A single gentle
+  // `sine.inOut` tween across the whole act reads as one steady, unhurried
+  // approach with no ramp: slow-in, even through the middle, slow-out right
+  // at the door, and it still lands exactly on DOOR_FRONT_T at approachEnd
+  // so every downstream act boundary is untouched.
+  tl.to(state, { pathT: DOOR_FRONT_T, duration: approachEnd - approachStart, ease: 'sine.inOut' }, approachStart)
     .to(state, { fog: 0.04, duration: approachEnd - approachStart }, approachStart)
     .to(state, { swayAmp: 0.5, duration: approachEnd - approachStart }, approachStart)
     .to(state, { crowT: 1, duration: 0.14 }, 0.28);
