@@ -100,3 +100,76 @@ body {
   gap: 2rem;
   padding: 4rem 1.5rem;
 }
+
+.chapel-title {
+  font-family: var(--serif);
+  font-weight: 400;
+  font-style: italic;
+  font-size: clamp(1.6rem, 4vw, 2.6rem);
+  letter-spacing: 0.3em;
+  margin-left: 0.3em;
+  color: var(--bone);
+  text-shadow: 0 0 30px rgba(193, 23, 15, 0.55);
+}
+
+.altar-frame {
+  width: min(720px, 92vw);
+  border: 1px solid rgba(193, 23, 15, 0.45);
+  box-shadow:
+    0 0 60px rgba(193, 23, 15, 0.22),
+    inset 0 0 40px rgba(0, 0, 0, 0.7);
+  background: rgba(5, 2, 1, 0.72);
+  padding: 10px;
+}
+.altar-frame iframe {
+  display: block;
+  width: 100%;
+  height: min(60vh, 560px);
+  border: 0;
+  background: #0a0302;
+}
+
+.bs-link {
+  color: rgba(216, 211, 200, 0.6);
+  font-size: 0.72rem;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  text-decoration: none;
+  border-bottom: 1px solid rgba(193, 23, 15, 0.4);
+  padding-bottom: 2px;
+  transition: color 0.3s;
+}
+.bs-link:hover { color: var(--bone); }
+
+.socials {
+  display: flex;
+  gap: 2.2rem;
+  margin-top: 1rem;
+}
+.socials a {
+  color: rgba(216, 211, 200, 0.55);
+  font-size: 0.72rem;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  text-decoration: none;
+  transition: color 0.3s, text-shadow 0.3s;
+}
+.socials a:hover {
+  color: var(--bone);
+  text-shadow: 0 0 16px rgba(193, 23, 15, 0.8);
+}
+
+.contact {
+  font-size: 0.78rem;
+  letter-spacing: 0.12em;
+  color: rgba(216, 211, 200, 0.5);
+}
+.contact a { color: rgba(216, 211, 200, 0.8); }
+
+.chapel-footer {
+  margin-top: 3rem;
+  font-size: 0.65rem;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: rgba(216, 211, 200, 0.25);
+}
