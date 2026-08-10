@@ -28,6 +28,7 @@ function boot() {
 
   // temporary: show exterior immediately until the timeline exists (Task 7)
   state.exteriorOpacity = 1;
+  state.fireflies = 1;
   document.getElementById('blackout').style.opacity = '0';
 
   gsap.ticker.add(() => app.render());

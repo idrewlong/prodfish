@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { createDepthPlane } from './depthPlane.js';
 import { TIERS } from '../device.js';
+import { createFireflies } from './particles.js';
+import { createPost } from './post.js';
 
 export const PLANE_Z = { exterior: 0, threshold: -12, interior: -40 };
 
@@ -30,6 +32,11 @@ export function initScene({ canvas, state, tier }) {
     planes[name] = plane;
   }
 
+  const fireflies = createFireflies(settings.particles);
+  scene.add(fireflies);
+
+  const post = createPost(renderer, scene, camera);
+
   function setTextures(name, colorTex, depthTex) {
     colorTex.colorSpace = THREE.SRGBColorSpace;
     const u = planes[name].material.uniforms;
@@ -41,6 +48,7 @@ export function initScene({ canvas, state, tier }) {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
+    post.composer.setSize(window.innerWidth, window.innerHeight);
   });
 
   const clock = new THREE.Clock();
@@ -57,7 +65,10 @@ export function initScene({ canvas, state, tier }) {
     planes.threshold.material.uniforms.uOpacity.value = state.thresholdOpacity;
     planes.interior.material.uniforms.uOpacity.value = state.interiorOpacity;
 
-    renderer.render(scene, camera);
+    fireflies.material.uniforms.uTime.value = t;
+    fireflies.material.uniforms.uOpacity.value = state.fireflies;
+    post.setTime(t);
+    post.composer.render();
   }
 
   return { renderer, scene, camera, planes, render, setTextures };
