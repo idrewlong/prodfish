@@ -98,7 +98,7 @@ export function buildWorld({ scene, models }) {
     chapelRoot = normalize(models.church.scene, 9);
     // Push back so the front facade sits just behind the doorway plane.
     const box = new THREE.Box3().setFromObject(chapelRoot);
-    chapelRoot.position.z = -(box.max.z - 0.4);
+    chapelRoot.position.z = -(box.max.z + 0.4);
     // Hide any authored door mesh — we hinge our own for scroll control.
     chapelRoot.traverse((o) => {
       if (o.isMesh && /door/i.test(o.name)) o.visible = false;
