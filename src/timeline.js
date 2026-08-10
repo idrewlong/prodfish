@@ -48,17 +48,22 @@ export function buildTimeline(state) {
     .to(state, { crowT: 1, duration: 0.14 }, 0.28);
 
   // ACT 3 — THRESHOLD: door swings open, red glow spills, we step through.
+  // crossGlow ramps here (was ACT 4, well after entry) so the neon cross is
+  // already lit and visible through the opening doorway as the door swings,
+  // instead of popping in after the camera has already crossed the plane —
+  // starts alongside doorT and spans the whole act.
   tl.to(state, { doorT: 1, duration: 0.1, ease: 'power2.inOut' }, thresholdStart)
+    .to(state, { crossGlow: 1, duration: thresholdEnd - thresholdStart, ease: 'power1.in' }, thresholdStart)
     .to('#glow', { opacity: 0.85, duration: 0.08 }, thresholdStart + 0.02)
     .to('#glow', { opacity: 0, duration: 0.06 }, thresholdEnd - 0.06)
     .to(state, { pathT: DOOR_IN_T, duration: thresholdEnd - thresholdStart, ease: 'power1.in' }, thresholdStart)
     .to(state, { fireflies: 0, duration: 0.08 }, thresholdStart + 0.04)
     .to(state, { fog: 0.028, duration: 0.08 }, thresholdEnd - 0.08);
 
-  // ACT 4 — CHAPEL: down the aisle; candles ignite; the cross hums on.
+  // ACT 4 — CHAPEL: down the aisle; candles ignite; the cross is already lit
+  // (see ACT 3 above) by the time we're inside.
   tl.to(state, { pathT: 0.97, duration: chapelEnd - chapelStart, ease: 'power1.out' }, chapelStart)
     .to(state, { candleT: 1, duration: (chapelEnd - chapelStart) * 0.9 }, chapelStart + 0.02)
-    .to(state, { crossGlow: 1, duration: 0.1 }, chapelStart)
     .to(state, { swayAmp: 0.3, duration: 0.1 }, chapelStart);
 
   // ACT 5 — BEATS: settle before the altar; residual drift only.

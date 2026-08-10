@@ -69,18 +69,28 @@ export function createCandles({ scene, altarAnchor, crossGltf, maxLights }) {
     return l;
   });
 
-  // Neon cross: generated GLB if present, else two emissive bars.
+  // Neon cross: generated GLB if present, else two emissive bars. Materials
+  // start black and are lerped toward full red by crossGlow every frame (see
+  // update() below) instead of a hard visibility gate, so the cross fades in
+  // smoothly as crossGlow ramps rather than popping in at a threshold.
+  const CROSS_RED = new THREE.Color('#ff2318');
+  const CROSS_BLACK = new THREE.Color('#000000');
   let cross;
+  const crossMaterials = [];
   if (crossGltf) {
     cross = crossGltf.scene;
     const box = new THREE.Box3().setFromObject(cross);
     cross.scale.setScalar(1.7 / box.getSize(new THREE.Vector3()).y);
     cross.traverse((o) => {
-      if (o.isMesh) o.material = new THREE.MeshBasicMaterial({ color: '#ff2318' });
+      if (o.isMesh) {
+        o.material = new THREE.MeshBasicMaterial({ color: '#000000' });
+        crossMaterials.push(o.material);
+      }
     });
   } else {
     cross = new THREE.Group();
-    const barMat = new THREE.MeshBasicMaterial({ color: '#ff2318' });
+    const barMat = new THREE.MeshBasicMaterial({ color: '#000000' });
+    crossMaterials.push(barMat);
     const v = new THREE.Mesh(new THREE.BoxGeometry(0.16, 2.2, 0.12), barMat);
     const h = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.16, 0.12), barMat);
     h.position.y = 0.45;
@@ -124,14 +134,18 @@ export function createCandles({ scene, altarAnchor, crossGltf, maxLights }) {
         // final pass actually encodes to sRGB.
         l.intensity = 1.6 * (0.85 + 0.15 * Math.sin(elapsed * 13 + idx));
       });
-      // Neon cross hum + altar wash.
+      // Neon cross hum + altar wash. Fade the material color (black -> red)
+      // by crossGlow every frame instead of a hard `visible` gate, so the
+      // cross is already glowing through the doorway as crossGlow ramps up
+      // during the threshold act (see timeline.js) rather than popping in.
       const flicker = 0.92 + 0.08 * Math.sin(elapsed * 30) * Math.sin(elapsed * 7.3);
-      cross.visible = crossGlow > 0.01;
+      const glow = Math.min(1, Math.max(0, crossGlow));
+      crossMaterials.forEach((m) => m.color.copy(CROSS_BLACK).lerp(CROSS_RED, glow));
       // task-12: was *14, moderated alongside the other lights (see world.js).
-      crossLight.intensity = crossGlow * 7 * flicker;
+      crossLight.intensity = glow * 7 * flicker;
       if (typeof window !== 'undefined' && window.__DEBUG_CHAPEL__) {
         window.__crossDebug = {
-          crossGlow, crossVisible: cross.visible, crossLightIntensity: crossLight.intensity,
+          crossGlow, crossLightIntensity: crossLight.intensity,
           crossWorldPos: cross.getWorldPosition(new THREE.Vector3()).toArray(),
           litCandleCount: litIdx.length,
         };
