@@ -44,6 +44,23 @@ body {
   opacity: 1;
 }
 
+#loading {
+  position: fixed;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #000;
+  font-size: 0.7rem;
+  letter-spacing: 0.5em;
+  text-transform: uppercase;
+  color: rgba(216, 211, 200, 0.4);
+  transition: opacity 0.9s ease;
+}
+body.ready #loading { opacity: 0; pointer-events: none; }
+.reduced #loading, .no-webgl #loading { display: none; }
+
 #hero {
   position: fixed;
   inset: 0;
