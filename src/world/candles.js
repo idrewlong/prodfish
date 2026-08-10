@@ -24,15 +24,11 @@ function makeGlowTexture() {
 }
 
 // Candle z placement: first candle just inside the door, spaced back toward
-// the altar. Shared by the placement loop below and the camera-proximity
-// ignition math in update() -- kept as named constants (not re-derived) so
-// the two stay in sync by construction.
+// the altar. Shared by the placement loop below and the light-pool tracking
+// in update() -- kept as a named constant (not re-derived) so the two stay
+// in sync by construction.
 const CANDLE_Z0 = -2.6;
 const CANDLE_Z_SPAN = 7.4;
-// fix-round: ignite ~2m before the camera actually reaches each candle, so
-// it's visibly catching light as it comes into frame rather than the
-// instant the camera is beside it.
-const CANDLE_LEAD = 2.0;
 
 // Candle rows flank the aisle (x = ±0.9) from just inside the door to the
 // altar. Flames are camera-facing additive sprites; a small pool of real
