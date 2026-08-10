@@ -19,17 +19,21 @@ describe('ACTS', () => {
 });
 
 describe('createState', () => {
-  it('starts before the scene: camera far, everything dark', () => {
+  it('starts before the scene: path start, everything dark and still', () => {
     const s = createState();
-    expect(s.camZ).toBe(14);
-    expect(s.exteriorOpacity).toBe(0);
-    expect(s.thresholdOpacity).toBe(0);
-    expect(s.interiorOpacity).toBe(0);
+    expect(s.pathT).toBe(0);
+    expect(s.doorT).toBe(0);
+    expect(s.crowT).toBe(0);
+    expect(s.candleT).toBe(0);
+    expect(s.crossGlow).toBe(0);
+    expect(s.fireflies).toBe(0);
+    expect(s.swayAmp).toBe(1);
+    expect(s.fog).toBeGreaterThan(0);
   });
   it('returns independent objects', () => {
     const a = createState();
     const b = createState();
-    a.camZ = 0;
-    expect(b.camZ).toBe(14);
+    a.pathT = 1;
+    expect(b.pathT).toBe(0);
   });
 });

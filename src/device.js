@@ -1,6 +1,6 @@
 export const TIERS = {
-  low: { segments: 64, particles: 60, dprCap: 1.5 },
-  high: { segments: 160, particles: 140, dprCap: 2 },
+  low:  { particles: 60,  dprCap: 1.5, candleLights: 2, crows: 3 },
+  high: { particles: 140, dprCap: 2,   candleLights: 6, crows: 5 },
 };
 
 export function deviceTier({ isMobileUA = false, memory, cores } = {}) {

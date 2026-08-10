@@ -22,13 +22,15 @@ describe('deviceTier', () => {
 describe('TIERS', () => {
   it('has settings for both tiers', () => {
     for (const t of ['low', 'high']) {
-      expect(TIERS[t].segments).toBeGreaterThan(0);
       expect(TIERS[t].particles).toBeGreaterThan(0);
       expect(TIERS[t].dprCap).toBeGreaterThan(0);
+      expect(TIERS[t].candleLights).toBeGreaterThan(0);
+      expect(TIERS[t].crows).toBeGreaterThan(0);
     }
   });
   it('low tier is lighter than high tier', () => {
-    expect(TIERS.low.segments).toBeLessThan(TIERS.high.segments);
     expect(TIERS.low.particles).toBeLessThan(TIERS.high.particles);
+    expect(TIERS.low.candleLights).toBeLessThan(TIERS.high.candleLights);
+    expect(TIERS.low.crows).toBeLessThanOrEqual(TIERS.high.crows);
   });
 });

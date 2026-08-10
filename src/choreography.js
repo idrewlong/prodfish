@@ -11,13 +11,13 @@ export const ACTS = {
 // reads it every frame. DOM overlays are tweened directly by GSAP.
 export function createState() {
   return {
-    camZ: 14,
-    camY: 0,
-    swayAmp: 1,          // ambient camera sway multiplier
-    exteriorOpacity: 0,
-    thresholdOpacity: 0,
-    interiorOpacity: 0,
-    fog: 0.15,           // fog mix on the exterior plane
-    fireflies: 0,        // firefly particle opacity
+    pathT: 0,        // 0..1 position along the camera path (arc length)
+    doorT: 0,        // 0..1 chapel door swing
+    crowT: 0,        // 0..1 crow-scatter progress
+    candleT: 0,      // 0..1 candle ignition progress down the aisle
+    swayAmp: 1,      // ambient camera sway multiplier
+    fog: 0.075,      // FogExp2 density
+    fireflies: 0,    // firefly particle opacity
+    crossGlow: 0,    // neon cross + altar light intensity
   };
 }
