@@ -7,11 +7,36 @@ import { crowPhase } from './events.js';
 // re-perches them.
 export function createCrows({ scene, gltf, roofline, count }) {
   const crows = [];
+  // The source GLB's own origin is NOT at the bird's feet — measured
+  // empirically while lowering the perch onto the real roof (see
+  // roofline.heightAt below): at our target 1.6m scale the rig's origin
+  // sits ~1.4m above the actual mesh. That offset was invisible while
+  // crows floated near the spire (a stray meter didn't read against a huge
+  // silhouette height), but once the perch height is corrected to the true
+  // roof surface it silently buries the whole bird under the roof mesh
+  // (confirmed: a raycast straight through the perch point hit the church
+  // roof mesh, not the crow, before this fix). Same scale/offset for every
+  // clone of the same source, so measure once and reuse.
+  let crowScale = 1;
+  let footOffset = 0;
+  if (gltf) {
+    const probeBox = new THREE.Box3().setFromObject(gltf.scene);
+    const probeSize = probeBox.getSize(new THREE.Vector3());
+    crowScale = 1.6 / Math.max(probeSize.x, probeSize.y, probeSize.z);
+    footOffset = -probeBox.min.y * crowScale;
+  }
   for (let i = 0; i < count; i++) {
     const side = i % 2 === 0 ? 1 : -1;
+    const perchX = side * (0.6 + (i % 3) * 0.9);
+    // Fix (roofline pass): roofline.heightAt raycasts the real roof surface
+    // at this x (see world.js) so the perch sits on the actual roofline edge
+    // instead of the old fixed y that floated far above the roof near the
+    // tower's full height. footOffset (above) keeps the bird's feet, not its
+    // rig origin, at that surface.
+    const perchY = (roofline.heightAt ? roofline.heightAt(perchX) : roofline.y) + footOffset + 0.03;
     const perch = new THREE.Vector3(
-      side * (0.6 + (i % 3) * 0.9),
-      roofline.y,
+      perchX,
+      perchY,
       roofline.z + (i - count / 2) * 0.7,
     );
     const escape = new THREE.CatmullRomCurve3([
@@ -38,9 +63,7 @@ export function createCrows({ scene, gltf, roofline, count }) {
       // (0.9 -> 1.6) after confirming via a close-range debug shot that the
       // model itself renders correctly but was too small a silhouette to
       // read at ~35-40m approach distance against the sky.
-      const box = new THREE.Box3().setFromObject(obj);
-      const size = box.getSize(new THREE.Vector3());
-      obj.scale.setScalar(1.6 / Math.max(size.x, size.y, size.z));
+      obj.scale.setScalar(crowScale);
       // task-12: the source GLB's material comes through with
       // transparent=true; combined with an alpha channel that the
       // compression pipeline (Task 4/5's meshoptimizer/KTX2 step) appears to
@@ -85,9 +108,27 @@ export function createCrows({ scene, gltf, roofline, count }) {
       crows.forEach((c, i) => {
         const phase = crowPhase(crowT, i);
         if (phase <= 0) {
-          c.obj.position.copy(c.perch);
+          // Idle perched motion: elapsed-time driven (never crowT/scrub — the
+          // scatter itself must stay purely scrub-driven, per spec) so the
+          // birds read as alive rather than static props before takeoff. A
+          // low-amplitude sine bob plus a brief wing-ruffle burst every few
+          // seconds, staggered per-bird so they don't move in unison.
+          const bob = Math.sin(elapsed * 1.6 + i * 1.7) * 0.035;
+          tmp.copy(c.perch);
+          tmp.y += bob;
+          c.obj.position.copy(tmp);
           c.obj.visible = true;
-          if (c.mixer) c.mixer.setTime(0);
+          if (c.mixer && c.clipDuration) {
+            const period = 4.5 + (i % 3) * 0.8;
+            const cyclePos = (elapsed + i * 0.9) % period;
+            const ruffleWindow = 0.5;
+            if (cyclePos < ruffleWindow) {
+              const eased = Math.sin((cyclePos / ruffleWindow) * Math.PI); // 0 -> 1 -> 0
+              c.mixer.setTime(eased * c.clipDuration * 0.3);
+            } else {
+              c.mixer.setTime(0);
+            }
+          }
           return;
         }
         c.obj.visible = phase < 0.98;
