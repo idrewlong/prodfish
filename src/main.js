@@ -1,6 +1,11 @@
+import * as THREE from 'three';
+import { gsap } from 'gsap';
+import { createState } from './choreography.js';
+import { detectTier } from './device.js';
+import { initScene } from './scenes/sceneManager.js';
 import { makeExterior, makeThreshold, makeInterior } from './scenes/placeholders.js';
 
-if (new URLSearchParams(location.search).has('debug')) {
+function debugScenes() {
   document.body.style.overflow = 'auto';
   for (const make of [makeExterior, makeThreshold, makeInterior]) {
     const { color, depth } = make();
@@ -9,6 +14,24 @@ if (new URLSearchParams(location.search).has('debug')) {
       document.body.appendChild(c);
     }
   }
-} else {
-  console.log('prodfish: boot');
 }
+
+function boot() {
+  const state = createState();
+  const tier = detectTier();
+  const app = initScene({ canvas: document.getElementById('scene'), state, tier });
+
+  const sources = { exterior: makeExterior(), threshold: makeThreshold(), interior: makeInterior() };
+  for (const [name, { color, depth }] of Object.entries(sources)) {
+    app.setTextures(name, new THREE.CanvasTexture(color), new THREE.CanvasTexture(depth));
+  }
+
+  // temporary: show exterior immediately until the timeline exists (Task 7)
+  state.exteriorOpacity = 1;
+  document.getElementById('blackout').style.opacity = '0';
+
+  gsap.ticker.add(() => app.render());
+}
+
+if (new URLSearchParams(location.search).has('debug')) debugScenes();
+else boot();
