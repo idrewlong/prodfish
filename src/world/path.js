@@ -28,7 +28,7 @@ const directCurve = new THREE.CatmullRomCurve3(
 
 // The fork is SAMPLED from the direct curve rather than hand-written, so the
 // two routes provably meet there. Hardcoding a guess would leave a gap.
-const T_FORK_DIRECT = 0.28;
+const T_FORK_DIRECT = 0.389;
 export const FORK = directCurve.getPointAt(T_FORK_DIRECT);
 
 // The scenic route: out to the monument row, past the crypt, then back to the
@@ -93,12 +93,16 @@ export function targetAt(t, route = 'direct') {
 }
 
 // Arc-length t whose point is nearest to `point` (sampled search).
+// Resolution note: 400 samples left a ~0.057m gap near the FORK parameter
+// (t ~= 0.389, where the curve's arc-length lookup table has more
+// approximation error), just over the 0.05m tolerance used in tests. 800
+// samples brings that to ~0.014m without changing any curve geometry.
 export function tNearest(point, route = 'direct') {
   const c = curveFor(route);
   let best = 0;
   let bestD = Infinity;
-  for (let i = 0; i <= 400; i++) {
-    const t = i / 400;
+  for (let i = 0; i <= 800; i++) {
+    const t = i / 800;
     const d = c.getPointAt(t).distanceToSquared(point);
     if (d < bestD) { bestD = d; best = t; }
   }

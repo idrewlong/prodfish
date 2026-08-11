@@ -39,6 +39,10 @@ describe('path', () => {
 });
 
 describe('work route', () => {
+  it('forks at a point distinct from its neighbouring landmarks', () => {
+    expect(FORK.distanceTo(LANDMARKS.FIELD_MID)).toBeGreaterThan(3);
+    expect(FORK.distanceTo(LANDMARKS.BEND)).toBeGreaterThan(3);
+  });
   it('both routes pass through FORK at their own fork parameter', () => {
     for (const route of ROUTES) {
       const t = tNearest(FORK, route);
