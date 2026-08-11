@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { positionAt } from './path.js';
+import { makeEngravedTexture, ENGRAVED_INK } from './engraving.js';
 
 // Ten markers flanking the scenic route between ROW_IN (z 18) and CRYPT
 // (z 8), alternating sides so the walk reads as an avenue. Deterministic —
@@ -106,8 +107,8 @@ function standUpright(obj, height) {
 }
 
 // A weathered two-armed signpost, built from primitives so there is no asset
-// to hunt down and nothing to mis-scale. The arms carry no 3D text — the
-// words are DOM labels anchored to them (see labels.js).
+// to hunt down and nothing to mis-scale. The arms carry engraved text planes
+// (see engraving.js) tagged with the route each one selects.
 function buildSignpost(scene) {
   const group = new THREE.Group();
   const wood = new THREE.MeshStandardMaterial({ color: '#241d16', roughness: 0.95 });
@@ -117,10 +118,32 @@ function buildSignpost(scene) {
   group.add(post);
 
   const armGeo = new THREE.BoxGeometry(1.5, 0.26, 0.06);
-  const beatsArm = new THREE.Mesh(armGeo, wood);
+
+  // A thin plane sitting a hair proud of the board's front face. Separating
+  // the letters from the board means the wording can change without
+  // touching geometry, and hover can tint the words alone.
+  function carve(arm, text, route) {
+    const tex = makeEngravedTexture(text);
+    const plane = new THREE.Mesh(
+      new THREE.PlaneGeometry(1.38, 0.22),
+      new THREE.MeshBasicMaterial({
+        map: tex,
+        transparent: true,
+        color: ENGRAVED_INK,
+        depthWrite: false,
+      }),
+    );
+    plane.position.z = 0.032; // just clear of the board's +z face
+    arm.add(plane);
+    arm.userData.route = route;
+    arm.userData.textMesh = plane;
+    return arm;
+  }
+
+  const beatsArm = carve(new THREE.Mesh(armGeo, wood), 'the beats', 'direct');
   beatsArm.position.set(-0.62, 2.25, 0);
   beatsArm.rotation.z = 0.04;
-  const workArm = new THREE.Mesh(armGeo, wood);
+  const workArm = carve(new THREE.Mesh(armGeo, wood), 'the work', 'work');
   workArm.position.set(0.62, 1.85, 0);
   workArm.rotation.z = -0.05;
   group.add(beatsArm, workArm);
@@ -137,7 +160,7 @@ function buildSignpost(scene) {
   scene.add(group);
 
   const anchor = new THREE.Vector3(SIGN_X, 2.55, SIGN_Z);
-  return { group, anchor };
+  return { group, anchor, arms: [beatsArm, workArm] };
 }
 
 function buildCrypt(scene) {
@@ -189,5 +212,5 @@ export function buildMonuments({ scene, stonesGltf, creditCount }) {
     credits.push(new THREE.Vector3(x, STONE_HEIGHT * s + 0.45, z));
   }
 
-  return { anchors: { sign: sign.anchor, credits, crypt: crypt.anchor } };
+  return { anchors: { sign: sign.anchor, credits, crypt: crypt.anchor }, signArms: sign.arms };
 }
