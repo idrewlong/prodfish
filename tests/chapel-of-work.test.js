@@ -5,6 +5,8 @@ import {
 } from '../src/world/chapelOfWork.js';
 import { positionAt, tRow } from '../src/world/path.js';
 import { SOCIALS, BIO, CATALOG_URL } from '../src/content/portfolio.js';
+import { MONUMENT_SPOTS } from '../src/world/monuments.js';
+import { CHAPEL_KEEP_OUT } from '../src/world/world.js';
 
 describe('the rider’s chapel', () => {
   it('straddles the scenic road, so the camera drives through it', () => {
@@ -54,5 +56,16 @@ describe('the rider’s chapel', () => {
     }
     expect(BIO.length).toBeGreaterThan(80);
     expect(CATALOG_URL).toMatch(/^https?:\/\//);
+  });
+});
+
+describe('the chapel’s clearing', () => {
+  it('stands clear of every song stone, so none is left inside the room', () => {
+    // The first placement put the nearest stone 3.0m from the building's
+    // centre -- a gravestone standing in the middle of the floor.
+    for (const [x, z] of MONUMENT_SPOTS) {
+      expect(Math.hypot(x - CHAPEL_CENTRE[0], z - CHAPEL_CENTRE[1]))
+        .toBeGreaterThan(CHAPEL_KEEP_OUT);
+    }
   });
 });

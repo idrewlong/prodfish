@@ -9,12 +9,19 @@ import { BIO, CATALOG_URL, SOCIALS } from '../content/portfolio.js';
 // continuous ride rather than introducing a second kind of movement.
 //
 // Placement is measured against the road, not eyeballed: the values below
-// are the road's own position and heading at t = 0.546, sampled from the
+// are the road's own position and heading at t = 0.630, sampled from the
 // work curve. The building is oriented so its long axis lies along the
 // direction of travel, which is what lets the camera pass straight through.
-export const CHAPEL_CENTRE = [59.4, 11.9];
-export const CHAPEL_ROT_Y = -2.336;
-export const CHAPEL_T = 0.546;
+//
+// It sits further down the road than the monument row's end, and that gap
+// is load-bearing rather than aesthetic: at the first placement (t=0.546)
+// the nearest song stone was 3.0m from the building's centre, i.e. standing
+// INSIDE the room — a gravestone in the middle of the floor, plainly
+// visible in screenshots. 8.2m clears the 7x11m footprint and its
+// keep-out with room to spare.
+export const CHAPEL_CENTRE = [47.1, 6.3];
+export const CHAPEL_ROT_Y = -1.674;
+export const CHAPEL_T = 0.630;
 
 // Inside dimensions. The doorway height is the number that matters: the
 // church taught this lesson painfully — scaling a building by its overall
@@ -30,7 +37,10 @@ const WALL_H = 4.2;
 // Anything closer than the corridor the stones are held to would be driven
 // through.
 export const RIDER_OFFSET = 2.4;
-export const BIKE_OFFSET = 2.6;
+// Wider than the rider's: the bike stands OUTSIDE the near door, where the
+// road is still bending into the building, so an offset that clears the
+// corridor inside does not clear it out there.
+export const BIKE_OFFSET = 4.0;
 
 // Distance from the building's centre to each doorway along its axis.
 export const DOOR_DISTANCE = ROOM_L / 2;
