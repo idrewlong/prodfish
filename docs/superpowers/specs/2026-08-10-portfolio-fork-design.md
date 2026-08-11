@@ -30,21 +30,27 @@ ALTAR_STOP` with it, diverging only in between:
 
 ```
 FORK        — signpost; NOT hardcoded, but sampled from the existing
-              curve at T_FORK ≈ 0.28 (lands around z ≈ 22)
+              curve at t ≈ 0.28 (lands around z ≈ 22)
   → ROW_IN    (6.5, 1.7, 18)
-  → ROW_MID   (11, 1.7, 12)   — monument row, stones flanking both sides
-  → CRYPT     (13.5, 1.7, 6)  — bio, full-catalog link
-  → RETURN    (7, 1.6, 2.5)
+  → ROW_MID   (11, 1.7, 13)   — monument row, stones flanking both sides
+  → CRYPT     (13, 1.7, 8)    — bio, full-catalog link
+  → RETURN    (7, 1.6, 5)
   → DOOR_FRONT (0, 1.55, 3.2) — rejoins the direct route
 ```
 
 `FORK` must be read from the direct curve rather than written by hand, or the
-two routes will not actually meet. For the same reason, the work curve is
-built including the direct curve's *neighbouring* control points on either
-side of the junction, so the two share a tangent direction and the swap
-produces no visible kink.
+two routes will not actually meet. The work curve also carries `START` and
+`FIELD_MID` so it leaves from the same place, and the whole
+`DOOR_FRONT…ALTAR_STOP` tail so the church sequence is identical on both
+routes.
 
-The work route is roughly 1.6× the direct route's length between those points.
+The invariant that matters is **positional** continuity at the fork: both
+curves pass through `FORK`, so switching there cannot teleport the camera.
+The camera's *direction* does change at that moment — which is correct, since
+you are turning onto another road — and it only ever happens while the
+visitor is standing at the signpost having just asked to turn.
+
+The work route is roughly 1.6× the direct route's length.
 
 Public API becomes `positionAt(t, route = 'direct')` and
 `targetAt(t, route = 'direct')`; existing callers and tests are unaffected by
@@ -113,9 +119,8 @@ new render passes. Low tier caps simultaneously-visible labels.
 
 ## Testing
 
-- Pure, unit-testable: route curve continuity (both routes agree in *position*
-  at `FORK` and `DOOR_FRONT` within tolerance, and in *tangent direction* at
-  those junctions so the swap cannot kink), monotonic forward travel on the
+- Pure, unit-testable: route continuity (both routes pass through `FORK`
+  within tolerance and end at `ALTAR_STOP`), monotonic forward travel on the
   work route,
   the work route's corridor clearance against its monument spots, label
   visibility windows, and the route lock/unlock rule around the fork.
