@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { positionAt, T_DOOR } from './path.js';
+import { positionAt, T_DOOR, tNearest, LANDMARKS } from './path.js';
 
 // Night sky/fog tone, shared with sceneManager.js. Deliberately NOT applied
 // through ACES Filmic tone mapping for the sky dome below: at the exposure
@@ -124,9 +124,22 @@ const CHAPEL_Z_STRETCH = 1;
 // perpendicular to the direction of travel; width wanders deterministically
 // (sine-based, no Math.random) so the edges read as worn/irregular rather
 // than a crisp paved band, with occasional narrow "washed-out" patches.
-function buildRoad(scene) {
-  const steps = 90;
-  const endT = Math.min(T_DOOR - 0.015, 0.98); // stop just shy of the doorway
+// The ribbon stops just shy of the doorway on whichever road it follows —
+// running it through the door would lay dirt down the aisle.
+export function roadEndT(route = 'direct') {
+  const doorT = route === 'direct' ? T_DOOR : tNearest(LANDMARKS.DOOR, route);
+  return Math.min(doorT - 0.015, 0.98);
+}
+
+// A road nearly three times longer needs proportionally more segments, or
+// its curves visibly facet into straight lines.
+export function roadSampleCount(route = 'direct') {
+  return route === 'work' ? 260 : 90;
+}
+
+function buildRoad(scene, route = 'direct') {
+  const steps = roadSampleCount(route);
+  const endT = roadEndT(route);
   const baseWidth = 2.2;
   const up = new THREE.Vector3(0, 1, 0);
   const positions = [];
@@ -134,8 +147,8 @@ function buildRoad(scene) {
   let vi = 0;
   for (let i = 0; i <= steps; i++) {
     const t = (endT * i) / steps;
-    const p = positionAt(t);
-    const ahead = positionAt(Math.min(t + 0.004, 1));
+    const p = positionAt(t, route);
+    const ahead = positionAt(Math.min(t + 0.004, 1), route);
     const tangent = new THREE.Vector3().subVectors(ahead, p).normalize();
     const perp = new THREE.Vector3().crossVectors(up, tangent).normalize();
     const wobble = Math.sin(i * 0.7) * 0.35 + Math.sin(i * 0.23 + 1.3) * 0.2;
@@ -161,7 +174,7 @@ function buildRoad(scene) {
   geo.computeVertexNormals();
   const mat = new THREE.MeshStandardMaterial({ color: '#5a4530', roughness: 1, side: THREE.DoubleSide });
   const road = new THREE.Mesh(geo, mat);
-  road.name = 'roadRibbon';
+  road.name = `roadRibbon-${route}`;
   scene.add(road);
 }
 
@@ -355,7 +368,11 @@ export function buildWorld({ scene, models, grassCount = 0, tier = 'high' }) {
   ground.rotation.x = Math.PI / 2;
   scene.add(ground);
 
-  buildRoad(scene);
+  // Both roads are dressed, not just the church one: the scenic road needs a
+  // trail through the new graveyard and back, or it reads as walking over
+  // open ground.
+  buildRoad(scene, 'direct');
+  buildRoad(scene, 'work');
   buildGrass(scene, grassCount);
 
   // Moonlight from behind the chapel + a hemisphere fill so silhouettes read
