@@ -242,18 +242,25 @@ export function buildMonuments({ scene, stonesGltf, creditCount }) {
     // the world rather than part of it.
     const credit = CREDITS[i];
     if (credit) {
+      // Size and place the plate from the stone's OWN bounding box. These
+      // markers come from a set with quite different shapes and depths, so a
+      // fixed offset either buries the words inside the stone or leaves them
+      // hanging in the air beside it.
+      const box = new THREE.Box3().setFromObject(stone);
+      const size = box.getSize(new THREE.Vector3());
+      const plateW = Math.max(0.7, size.x * 0.92);
       const plate = new THREE.Mesh(
-        new THREE.PlaneGeometry(0.78, 0.2),
+        new THREE.PlaneGeometry(plateW, plateW * 0.28),
         new THREE.MeshBasicMaterial({
-          map: makeEngravedTexture(credit.track, { widthPx: 512, heightPx: 132, basePx: 62 }),
+          map: makeEngravedTexture(credit.track, { widthPx: 640, heightPx: 180, basePx: 86 }),
           transparent: true,
           color: ENGRAVED_INK,
           depthWrite: false,
         }),
       );
-      // On the face of the stone, a little above its middle, standing just
-      // proud of the surface so it never z-fights with the carving beneath.
-      plate.position.set(0, STONE_HEIGHT * s * 0.66, 0.42);
+      // On the face, above the middle, standing just proud of the surface so
+      // it never z-fights with the stone behind it.
+      plate.position.set(0, size.y * 0.62, size.z / 2 + 0.04);
       stone.add(plate);
       stone.userData.href = credit.url;
       stone.userData.label = `${credit.artist} — ${credit.track}`;
