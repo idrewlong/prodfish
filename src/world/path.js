@@ -35,7 +35,15 @@ export function targetAt(t) {
   const tc = THREE.MathUtils.clamp(t, 0, 1);
   const ahead = Math.min(tc + 0.04, 1);
   const p = curve.getPointAt(ahead);
-  if (ahead === 1) p.z -= 2;
+  // fix-round: was `if (ahead === 1) p.z -= 2` -- a step function that
+  // snapped the look target back by 2m the instant t crossed 0.96 (where
+  // tc + 0.04 first clamps to 1). That single-frame jump read as the
+  // camera itself switching position right before the altar. Ramp it in
+  // continuously instead: `over` rises 0 -> 1 smoothly as (t + 0.04)
+  // overshoots the curve's end, from t = 0.96 to t = 1.00, so the offset
+  // fades in across the same range that used to trigger the snap.
+  const over = THREE.MathUtils.clamp((tc + 0.04 - 1) / 0.04, 0, 1);
+  p.z -= 2 * over;
   // Ease the look point upward on the final approach so the neon cross,
   // mounted above eye height on the interior back wall, comes into frame
   // instead of sitting just off the top edge when the camera is close.

@@ -87,11 +87,22 @@ export function buildTimeline(state) {
 
   // ACT 4 — CHAPEL: down the aisle; candles ignite; the cross is already lit
   // (see ACT 3 above) by the time we're inside.
-  tl.to(state, { pathT: 0.97, duration: chapelEnd - chapelStart, ease: 'power1.out' }, chapelStart)
+  // fix-round: pathT used to be two separate tweens split at the
+  // chapel/beats act boundary -- chapel eased 'power1.out' down to 0.97
+  // (decelerating to ~zero velocity right at the seam), then beats picked
+  // up at chapelEnd with the timeline's default 'none' (constant) ease.
+  // Velocity jumping from ~0 to a nonzero constant exactly at the act
+  // boundary read as the camera "switching position" -- the same class of
+  // discontinuity as the old targetAt() step function (see path.js). A
+  // single tween spanning both acts' full span removes the seam: one
+  // continuous decelerating push all the way to the altar stop.
+  tl.to(state, { pathT: 1, duration: 1 - chapelStart, ease: 'sine.out' }, chapelStart)
     .to(state, { candleT: 1, duration: (chapelEnd - chapelStart) * 0.9 }, chapelStart + 0.02)
     .to(state, { swayAmp: 0.3, duration: 0.1 }, chapelStart);
 
-  // ACT 5 — BEATS: settle before the altar; residual drift only.
+  // ACT 5 — BEATS: settle before the altar; camera motion is the single
+  // tween above (it spans this act too) -- this only drives the embed
+  // fade-in, on the same scroll fraction as the settle.
   // fix-round: #chapel (the BeatStars embed DOM section) is an in-flow block
   // at the bottom of the scroll-track, so it was already sliding into
   // the viewport well before this act even starts, while the
@@ -99,8 +110,7 @@ export function buildTimeline(state) {
   // as a jarring scene change. #chapel now starts at opacity 0 (style.css)
   // and fades in here, driven by the same scroll fraction as the camera
   // settle, so it only becomes visible once pathT has essentially arrived.
-  tl.to(state, { pathT: 1, duration: 1 - chapelEnd }, chapelEnd)
-    .to('#chapel', { opacity: 1, duration: (1 - chapelEnd) * 0.55, ease: 'sine.in' }, chapelEnd);
+  tl.to('#chapel', { opacity: 1, duration: (1 - chapelEnd) * 0.55, ease: 'sine.in' }, chapelEnd);
 
   return tl;
 }
