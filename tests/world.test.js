@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   PROP_SPOTS, minPathClearance, roadEndT, roadSampleCount,
   SWAMP_CENTRE, SWAMP_RADIUS, swampReedSpots, swampTreeSpots, BIKE_SPOT,
+  PINE_INNER, PINE_OUTER, HILL_RADIUS, pineSpots,
 } from '../src/world/world.js';
 import { positionAt } from '../src/world/path.js';
 
@@ -70,5 +71,30 @@ describe('the abandoned bike', () => {
       min = Math.min(min, Math.hypot(p.x - x, p.z - z));
     }
     expect(min).toBeGreaterThan(2.0);
+  });
+});
+
+describe('the backdrop', () => {
+  it('rings the scene beyond the graveyard, not through it', () => {
+    expect(PINE_INNER).toBeGreaterThan(25);
+    expect(PINE_OUTER).toBeGreaterThan(PINE_INNER);
+    expect(HILL_RADIUS).toBeGreaterThan(PINE_OUTER);
+  });
+  it('places pines deterministically', () => {
+    expect(pineSpots(50)).toEqual(pineSpots(50));
+  });
+  it('keeps the woods out of the road corridor and off the church', () => {
+    for (const [x, z] of pineSpots(200)) {
+      let near = Infinity;
+      for (let i = 0; i <= 150; i++) {
+        const p = positionAt(i / 150);
+        near = Math.min(near, Math.hypot(p.x - x, p.z - z));
+      }
+      // Far enough that a pine never looms over the camera: at 7m a 6m tree
+      // fills the frame, which is exactly what the first render did.
+      expect(near).toBeGreaterThan(18);
+      // The church sits around the doorway plane; nothing may grow through it.
+      expect(Math.hypot(x, z + 5)).toBeGreaterThan(14);
+    }
   });
 });

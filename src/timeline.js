@@ -95,7 +95,7 @@ export function buildTimeline(state) {
   // into the doorway and read as a lurch.
   tl.to(state, { pathT: APPROACH_END_T, duration: approachEnd - approachStart, ease: 'sine.inOut' }, approachStart);
 
-  tl.to(state, { fog: 0.04, duration: approachEnd - approachStart }, approachStart)
+  tl.to(state, { fog: 0.03, duration: approachEnd - approachStart }, approachStart)
     .to(state, { swayAmp: 0.5, duration: approachEnd - approachStart }, approachStart)
     .to(state, { crowT: 1, duration: 0.14 }, 0.28);
 

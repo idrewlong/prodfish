@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { positionAt, T_DOOR } from './path.js';
 
 // Night sky/fog tone, shared with sceneManager.js. Deliberately NOT applied
@@ -143,20 +144,39 @@ function buildRoad(scene) {
   const positions = [];
   const indices = [];
   let vi = 0;
+  const colors = [];
   for (let i = 0; i <= steps; i++) {
-    const t = (endT * i) / steps;
+    const u = i / steps;
+    const t = endT * u;
     const p = positionAt(t);
     const ahead = positionAt(Math.min(t + 0.004, 1));
     const tangent = new THREE.Vector3().subVectors(ahead, p).normalize();
     const perp = new THREE.Vector3().crossVectors(up, tangent).normalize();
-    const wobble = Math.sin(i * 0.7) * 0.35 + Math.sin(i * 0.23 + 1.3) * 0.2;
-    const wornPatch = Math.sin(i * 0.31) > 0.85 ? 0.4 : 1; // rare thin/broken stretch
-    const halfW = Math.max(0.22, (baseWidth + wobble) * wornPatch) / 2;
+
+    // A worn track wanders slowly; it does not flicker. The previous version
+    // varied width against the SEGMENT INDEX (period ~9 of 140 segments), and
+    // pinched to 40% wherever `sin(i * 0.31) > 0.85` -- a hard binary cut that
+    // read as random chunks bitten out of the road. Both are now smooth
+    // functions of distance travelled, so the edges undulate like a path worn
+    // by feet rather than like noise.
+    // Straighter than before, but still a dirt path rather than a paved
+    // road: one long, slow undulation with a little fine grain on top. An
+    // earlier version added a bright packed "crown" down the middle, which
+    // tipped it over into looking engineered.
+    const wobble = Math.sin(u * Math.PI * 2) * 0.16 + Math.sin(u * Math.PI * 5 + 1.3) * 0.06;
+    // Narrows gently toward the church, where the ground is firmer and the
+    // traffic funnels.
+    const taper = 1 - 0.22 * u;
+    const halfW = ((baseWidth + wobble) * taper) / 2;
+
     const left = p.clone().addScaledVector(perp, -halfW);
     const right = p.clone().addScaledVector(perp, halfW);
     left.y = 0.012;
     right.y = 0.012;
     positions.push(left.x, left.y, left.z, right.x, right.y, right.z);
+    // Darker at the edges so the ribbon blends into the ground instead of
+    // reading as a sticker laid on top of it.
+    colors.push(0.45, 0.45, 0.45, 0.45, 0.45, 0.45);
     if (i > 0) {
       const a = vi - 2;
       const b = vi - 1;
@@ -166,11 +186,15 @@ function buildRoad(scene) {
     }
     vi += 2;
   }
+
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
   geo.setIndex(indices);
   geo.computeVertexNormals();
-  const mat = new THREE.MeshStandardMaterial({ color: '#5a4530', roughness: 1, side: THREE.DoubleSide });
+  const mat = new THREE.MeshStandardMaterial({
+    color: '#5a4530', roughness: 1, side: THREE.DoubleSide, vertexColors: true,
+  });
   const road = new THREE.Mesh(geo, mat);
   road.name = 'roadRibbon';
   scene.add(road);
@@ -289,13 +313,131 @@ function buildGrass(scene, count) {
 }
 
 
+
+// ------------------------------------------------------------ backdrop ---
+// Rolling hills and thick pine woods ringing the whole scene, so the church
+// sits in Alabama low country rather than on an empty plane. Everything here
+// The band is closer than "distant scenery" instinct suggests, and that is
+// deliberate: at the approach's fog density (0.03) anything past ~55m is
+// extinguished entirely. A first attempt put the treeline at 40-88m and the
+// ridge at 105m, and none of it rendered at all -- the horizon was a flat
+// grey band. These distances put the woods inside the range fog still
+// leaves visible, while the 20m corridor clearance keeps them from looming.
+export const PINE_INNER = 26;
+export const PINE_OUTER = 54;
+export const HILL_RADIUS = 68;
+
+// Deterministic pine placement in a ring around the scene, held clear of the
+// road corridor and of the church's own footprint.
+export function pineSpots(count) {
+  const rand = makeLcg(0x7a1c0de5);
+  const samples = [];
+  for (let i = 0; i <= 60; i++) samples.push(positionAt(i / 60));
+  const spots = [];
+  let guard = 0;
+  while (spots.length < count && guard < count * 30) {
+    guard += 1;
+    const a = rand() * Math.PI * 2;
+    const r = PINE_INNER + rand() * (PINE_OUTER - PINE_INNER);
+    const x = Math.cos(a) * r;
+    const z = Math.sin(a) * r;
+    // These are BACKGROUND woods, so the clearance that matters is not
+    // "does it touch the road" but "does it loom over the camera". At 7m a
+    // 6m pine fills the frame; the first render put one squarely in the
+    // corner of the opening shot. 20m keeps them where they read as a
+    // treeline instead of as scenery the visitor walks into.
+    let near = Infinity;
+    for (const p of samples) near = Math.min(near, Math.hypot(p.x - x, p.z - z));
+    if (near < 20) continue;
+    if (Math.hypot(x, z + 5) < 16) continue;
+    spots.push([+x.toFixed(1), +z.toFixed(1), +(0.65 + rand() * 0.8).toFixed(2)]);
+  }
+  return spots;
+}
+
+// A single conifer: a stack of two cones over a short trunk, which reads as
+// a pine at the distances involved for a fraction of a model's cost.
+function pineGeometry() {
+  const parts = [];
+  const trunk = new THREE.CylinderGeometry(0.18, 0.26, 1.6, 5);
+  trunk.translate(0, 0.8, 0);
+  parts.push(trunk);
+  const lower = new THREE.ConeGeometry(1.9, 4.2, 7);
+  lower.translate(0, 3.3, 0);
+  parts.push(lower);
+  const upper = new THREE.ConeGeometry(1.25, 3.4, 7);
+  upper.translate(0, 5.9, 0);
+  parts.push(upper);
+  return mergeGeometries(parts);
+}
+
+function buildBackdrop(scene, tier) {
+  // The woods.
+  const count = tier === 'low' ? 220 : 520;
+  const pines = new THREE.InstancedMesh(
+    pineGeometry(),
+    // Lighter than the fog it stands in (NIGHT_SKY #141d30), not darker:
+    // anything darker than the fog colour converges to it with distance and
+    // simply disappears. A treeline in mist reads as a PALE band against the
+    // night, which is also how it looks in the reference photography.
+    new THREE.MeshStandardMaterial({ color: '#2c3d33', roughness: 1 }),
+    count,
+  );
+  pines.name = 'pineWoods';
+  const dummy = new THREE.Object3D();
+  const spots = pineSpots(count);
+  spots.forEach(([x, z, sc], i) => {
+    dummy.position.set(x, 0, z);
+    dummy.rotation.set(0, (i * 2.399) % (Math.PI * 2), 0);
+    dummy.scale.set(sc, sc * (0.85 + ((i * 29) % 50) / 100), sc);
+    dummy.updateMatrix();
+    pines.setMatrixAt(i, dummy.matrix);
+  });
+  pines.count = spots.length;
+  pines.instanceMatrix.needsUpdate = true;
+  scene.add(pines);
+
+  // The hills: a ring wall whose top edge undulates, read as a horizon
+  // silhouette rather than as modelled terrain. Unlit and fog-affected, so
+  // it fades into the mist exactly like the woods in front of it.
+  const segments = 96;
+  const pos = [];
+  const idx = [];
+  for (let i = 0; i <= segments; i++) {
+    const a = (i / segments) * Math.PI * 2;
+    const x = Math.cos(a) * HILL_RADIUS;
+    const z = Math.sin(a) * HILL_RADIUS;
+    const h = 9
+      + Math.sin(a * 2.0) * 4.5
+      + Math.sin(a * 3.7 + 1.1) * 3.0
+      + Math.sin(a * 6.3 + 2.4) * 1.6;
+    pos.push(x, 0, z, x, h, z);
+    if (i > 0) {
+      const b = (i - 1) * 2;
+      idx.push(b, b + 1, b + 2, b + 1, b + 3, b + 2);
+    }
+  }
+  const hillGeo = new THREE.BufferGeometry();
+  hillGeo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  hillGeo.setIndex(idx);
+  hillGeo.computeVertexNormals();
+  const hills = new THREE.Mesh(
+    hillGeo,
+    // Same reasoning as the pines: pale enough to sit above the fog value
+    // so the ridge reads as a silhouette instead of dissolving into it.
+    new THREE.MeshBasicMaterial({ color: '#26344a', side: THREE.BackSide }),
+  );
+  hills.name = 'hills';
+  scene.add(hills);
+}
+
 // ---------------------------------------------------------------- swamp ---
 // Low wet country around the monument row on the scenic road. Deliberately
 // far from the church so the two places read as different countries. This
 // reuses the graveyard's own grass geometry and placement helpers with
 // swampier parameters rather than introducing a second vegetation system.
-export const SWAMP_CENTRE = [0, 24];
-export const SWAMP_RADIUS = 26;
+export const SWAMP_CENTRE = [0, 32];
+export const SWAMP_RADIUS = 20;
 
 // Deterministic, and held clear of the camera corridor — the clearance test
 // is only meaningful against fixed positions.
@@ -490,6 +632,7 @@ export function buildWorld({ scene, models, grassCount = 0, tier = 'high' }) {
   buildRoad(scene);
   buildGrass(scene, grassCount);
   buildSwamp(scene, models, tier);
+  buildBackdrop(scene, tier);
 
   // Moonlight from behind the chapel + a hemisphere fill so silhouettes read
   // in the fog without flattening the southern-gothic near-dark mood.
