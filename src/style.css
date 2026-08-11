@@ -69,7 +69,14 @@ body.ready #loading { opacity: 0; pointer-events: none; }
 #labels {
   position: fixed;
   inset: 0;
-  z-index: 3;
+  /* Must stay above #scroll-track (z-index: 4, position: relative, 1000vh
+     tall, no pointer-events: none) -- at any lower z-index #scroll-track's
+     stacking context sits on top of this layer for the entire scroll and
+     silently eats every click meant for a signpost arm or credit link. Also
+     above #loading's 5 is harmless: labels stay visibility: hidden until
+     update() first reveals one, which is after boot finishes. Do not lower
+     this back toward 3 without re-checking the click path. */
+  z-index: 6;
   pointer-events: none;
   overflow: hidden;
 }
