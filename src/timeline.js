@@ -1,9 +1,9 @@
 import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { ACTS } from './choreography.js';
-import { T_DOOR } from './world/path.js';
+import { tNearest, FORK, LANDMARKS, T_FORK_SCROLL } from './world/path.js';
 
-export function buildTimeline(state) {
+export function buildTimeline(state, route = 'direct') {
   gsap.registerPlugin(ScrollTrigger);
 
   const tl = gsap.timeline({
@@ -24,20 +24,14 @@ export function buildTimeline(state) {
   const [thresholdStart, thresholdEnd] = ACTS.threshold;
   const [chapelStart, chapelEnd] = ACTS.chapel;
 
-  // Path keyframes derive from the door's real arc-length position so the
-  // camera reaches the doorway exactly at the threshold act, whatever the
-  // curve's proportions are.
-  const DOOR_FRONT_T = T_DOOR - 0.07; // a few meters shy of the door
-  // fix-round: the approach act used to tween all the way to DOOR_FRONT_T
-  // itself, which meant its sine.inOut deceleration had to fully complete
-  // right at the door -- combined with the threshold act's old power1.in
-  // (accelerating) pathT ease picking up immediately after, the camera
-  // read as slow-then-sudden-fast right at the doorway, the exact "speeds
-  // up and enters too fast" complaint. Stopping a small margin short hands
-  // the final approach to the door over to the threshold act's own slow,
-  // even crawl instead.
+  // Landmark parameters differ per route (the scenic route is longer, so the
+  // door sits at a different fraction of it), so they are resolved per build
+  // rather than imported as constants.
+  const doorT = tNearest(LANDMARKS.DOOR, route);
+  const forkT = tNearest(FORK, route);
+  const DOOR_FRONT_T = doorT - 0.07;
   const APPROACH_END_T = DOOR_FRONT_T - 0.02;
-  const DOOR_IN_T = Math.min(T_DOOR + 0.05, 0.9); // just inside the nave
+  const DOOR_IN_T = Math.min(doorT + 0.05, 0.9);
 
   // ACT 1 — ARRIVAL: world emerges out of black; barely any motion yet.
   // fix-round: #blackout now starts at 0.55 opacity (style.css), not 1 --
@@ -50,19 +44,12 @@ export function buildTimeline(state) {
     .to('#hero', { opacity: 0, y: -70, duration: 0.08 }, arrivalEnd - 0.03);
 
   // ACT 2 — APPROACH: the long walk; fog thickens; crows scatter mid-way.
-  // fix-round: previously split into a slow tree-corridor tween (first 65%
-  // of this act's scroll) followed by a `power2.in`-eased sprint for the
-  // final 35% -- power2.in is slow-start-fast-end, and because that segment
-  // was ALSO squeezed into a small slice of scroll, its fast end produced a
-  // violent camera lurch right at the church (confirmed via screenshots:
-  // 40% scroll shows the church small and distant, 45% shows the camera
-  // point-blank at the door -- a whiplash jump, not a walk). A single gentle
-  // `sine.inOut` tween across the whole act reads as one steady, unhurried
-  // approach with no ramp: slow-in, even through the middle, slow-out
-  // toward the door. It now lands on APPROACH_END_T (a hair short of
-  // DOOR_FRONT_T) at approachEnd, leaving the last stretch to the
-  // threshold act's linear crawl -- see APPROACH_END_T comment above.
-  tl.to(state, { pathT: APPROACH_END_T, duration: approachEnd - approachStart, ease: 'sine.inOut' }, approachStart)
+  // The approach is split at the signpost. Both routes reach the fork at the
+  // SAME scroll fraction (T_FORK_SCROLL) even though forkT differs between
+  // them — that is what lets a route switch preserve the camera's position
+  // and the reader's scroll position at the same time.
+  tl.to(state, { pathT: forkT, duration: T_FORK_SCROLL - approachStart, ease: 'sine.inOut' }, approachStart)
+    .to(state, { pathT: APPROACH_END_T, duration: approachEnd - T_FORK_SCROLL, ease: 'sine.inOut' }, T_FORK_SCROLL)
     .to(state, { fog: 0.04, duration: approachEnd - approachStart }, approachStart)
     .to(state, { swayAmp: 0.5, duration: approachEnd - approachStart }, approachStart)
     .to(state, { crowT: 1, duration: 0.14 }, 0.28);

@@ -19,5 +19,6 @@ export function createState() {
     fog: 0.022,      // FogExp2 density
     fireflies: 0,    // firefly particle opacity
     crossGlow: 0,    // neon cross + altar light intensity
+    route: 'direct',  // 'direct' | 'work' — which road we are walking
   };
 }

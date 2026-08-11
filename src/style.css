@@ -308,3 +308,57 @@ body.ready #loading { opacity: 0; pointer-events: none; }
   opacity: 1;
   background: radial-gradient(ellipse at 50% 30%, #2b0402, #0d0100 75%);
 }
+
+.label-sign {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  align-items: flex-start;
+}
+.sign-arm {
+  background: rgba(8, 7, 6, 0.55);
+  border: 1px solid rgba(216, 211, 200, 0.28);
+  color: var(--bone);
+  font-family: var(--mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  padding: 0.5rem 0.9rem;
+  cursor: pointer;
+  transition: border-color 0.25s, color 0.25s, background 0.25s;
+}
+.sign-arm:hover,
+.sign-arm:focus-visible {
+  border-color: var(--blood);
+  background: rgba(30, 4, 2, 0.7);
+  color: #fff;
+}
+.sign-arm-work { margin-left: 1.4rem; }
+
+.label-crypt {
+  width: min(30rem, 74vw);
+  white-space: normal;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+.label-crypt p {
+  font-family: var(--serif);
+  font-size: 1rem;
+  line-height: 1.6;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  color: rgba(216, 211, 200, 0.9);
+}
+.label-crypt a {
+  color: rgba(216, 211, 200, 0.7);
+  font-size: 0.68rem;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  text-decoration: none;
+  border-bottom: 1px solid rgba(193, 23, 15, 0.5);
+  padding-bottom: 2px;
+  align-self: center;
+}
+.label-crypt a:hover { color: var(--bone); }

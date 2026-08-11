@@ -1,9 +1,12 @@
 import { gsap } from 'gsap';
+import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { createState } from './choreography.js';
 import { detectTier } from './device.js';
 import { initScene } from './scenes/sceneManager.js';
 import { createAssetLoader } from './world/assets.js';
-import { T_DOOR, T_GATE } from './world/path.js';
+import { T_DOOR, T_GATE, T_FORK_SCROLL } from './world/path.js';
+import { createRouteState } from './world/route.js';
+import { CREDITS, BIO, CATALOG_URL } from './content/portfolio.js';
 import { initScroll } from './scroll.js';
 import { buildTimeline } from './timeline.js';
 
@@ -20,7 +23,7 @@ const prefersReduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 async function loadModels() {
   const load = createAssetLoader();
-  const [church, crow, cross, gravestoneA, gravestoneB, treeA, treeB] = await Promise.all([
+  const [church, crow, cross, gravestoneA, gravestoneB, treeA, treeB, stones] = await Promise.all([
     load.required('/models/church.glb').catch((e) => {
       console.error('chapel failed to load', e);
       return null; // world.js builds a shell; loading screen still clears
@@ -31,8 +34,64 @@ async function loadModels() {
     load.optional('/models/gravestone-b.glb'),
     load.optional('/models/tree-a.glb'),
     load.optional('/models/tree-b.glb'),
+    load.optional('/models/grave-stones.glb'),
   ]);
-  return { church, crow, cross, gravestoneA, gravestoneB, treeA, treeB };
+  return { church, crow, cross, gravestoneA, gravestoneB, treeA, treeB, stones };
+}
+
+// The signpost's arms are real buttons floated over the 3D post, so the
+// choice is clickable, focusable and announced — not a mouse-only hotspot.
+function attachSignpost(app, routeState) {
+  const wrap = document.createElement('div');
+  wrap.className = 'label label-sign';
+
+  const beats = document.createElement('button');
+  beats.type = 'button';
+  beats.className = 'sign-arm';
+  beats.textContent = 'the beats ↑';
+  beats.addEventListener('click', () => routeState.choose('direct'));
+
+  const work = document.createElement('button');
+  work.type = 'button';
+  work.className = 'sign-arm sign-arm-work';
+  work.textContent = 'the work →';
+  work.addEventListener('click', () => routeState.choose('work'));
+
+  wrap.append(beats, work);
+  app.labels.add({ anchor: app.anchors.sign, el: wrap });
+}
+
+// Credit labels are gated on the scenic route. The monument row stands off to
+// the side of the direct path and is well within label range from it, so
+// without this gate every walker would see credits floating over the
+// graveyard whether or not they chose to visit them.
+function attachCreditLabels(app, state) {
+  const onWorkRoute = () => state.route === 'work';
+
+  app.anchors.credits.forEach((anchor, i) => {
+    const credit = CREDITS[i];
+    if (!credit) return;
+    const a = document.createElement('a');
+    a.className = 'label';
+    a.href = credit.url;
+    a.target = '_blank';
+    a.rel = 'noopener';
+    a.innerHTML = `${credit.artist}<span class="label-track"></span>`;
+    a.querySelector('.label-track').textContent = credit.track;
+    app.labels.add({ anchor, el: a, when: onWorkRoute });
+  });
+
+  const crypt = document.createElement('div');
+  crypt.className = 'label label-crypt';
+  const bio = document.createElement('p');
+  bio.textContent = BIO;
+  const catalog = document.createElement('a');
+  catalog.href = CATALOG_URL;
+  catalog.target = '_blank';
+  catalog.rel = 'noopener';
+  catalog.textContent = 'the full catalog ↗';
+  crypt.append(bio, catalog);
+  app.labels.add({ anchor: app.anchors.crypt, el: crypt, when: onWorkRoute });
 }
 
 async function boot() {
@@ -43,7 +102,47 @@ async function boot() {
   document.body.classList.add('ready');
 
   initScroll();
-  buildTimeline(state);
+  let timeline = buildTimeline(state, state.route);
+
+  // Switching routes rebuilds the timeline, because the door and altar sit at
+  // different fractions of a longer curve. The scenic route also needs more
+  // scroll to keep the metres-per-scroll pacing steady, so the track grows.
+  // Both routes put the fork at T_FORK_SCROLL, so restoring the scroll
+  // position by fraction leaves the camera exactly where it was: at the
+  // signpost. Without that pinning the camera would jump on every switch.
+  const routeState = createRouteState((next) => {
+    state.route = next;
+    document.getElementById('scroll-track').style.height = next === 'work' ? '1600vh' : '1000vh';
+    timeline.scrollTrigger?.kill();
+    timeline.kill();
+    // Move the scroll position to the fork BEFORE building the new timeline.
+    // buildTimeline() constructs a ScrollTrigger that syncs itself to the
+    // CURRENT window.scrollY at construction time -- if that read happens
+    // while scrollY is still the pre-switch value (now the wrong fraction of
+    // the just-resized track), the fresh scrub timeline snaps to whatever
+    // that stale fraction maps to (verified: it lands back near the arrival
+    // act, pathT ~0.08) and only crawls back to the fork over the next
+    // second of scrub interpolation -- a visible rewind-then-refly, exactly
+    // the jump this pinning scheme exists to prevent. Reading `max` off
+    // scrollHeight after the height change (already true here) and
+    // scrolling first means the new ScrollTrigger's construction-time sync
+    // reads the correct fraction from the start.
+    const max = document.documentElement.scrollHeight - window.innerHeight;
+    window.scrollTo(0, T_FORK_SCROLL * max);
+    timeline = buildTimeline(state, next);
+    ScrollTrigger.refresh();
+  });
+
+  attachSignpost(app, routeState);
+  attachCreditLabels(app, state);
+
+  ScrollTrigger.create({
+    trigger: '#scroll-track',
+    start: 'top top',
+    end: 'bottom bottom',
+    onUpdate: (self) => routeState.syncLock(self.progress),
+  });
+
   gsap.ticker.add(() => app.render());
 }
 

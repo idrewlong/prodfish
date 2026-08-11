@@ -7,6 +7,8 @@ import { createCandles } from '../world/candles.js';
 import { doorAngle } from '../world/events.js';
 import { createFireflies } from './particles.js';
 import { createPost } from './post.js';
+import { buildMonuments } from '../world/monuments.js';
+import { createLabelLayer } from '../labels.js';
 
 export function initScene({ canvas, state, tier, models }) {
   const settings = TIERS[tier];
@@ -29,6 +31,15 @@ export function initScene({ canvas, state, tier, models }) {
   const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 130);
 
   const world = buildWorld({ scene, models, grassCount: settings.grass, tier });
+  const monuments = buildMonuments({
+    scene,
+    stonesGltf: models.stones,
+    creditCount: 10,
+  });
+  const labels = createLabelLayer({
+    container: document.getElementById('labels'),
+    camera,
+  });
   const crows = createCrows({
     scene, gltf: models.crow, roofline: world.roofline, count: settings.crows,
   });
@@ -137,13 +148,13 @@ export function initScene({ canvas, state, tier, models }) {
       post.composer.render();
       return;
     }
-    const pos = positionAt(state.pathT);
+    const pos = positionAt(state.pathT, state.route);
     camera.position.set(
       pos.x + Math.sin(t * 0.28) * 0.14 * state.swayAmp,
       pos.y + Math.sin(t * 0.19) * 0.08 * state.swayAmp,
       pos.z,
     );
-    look.copy(targetAt(state.pathT));
+    look.copy(targetAt(state.pathT, state.route));
     camera.lookAt(look);
 
     world.door.rotation.y = doorAngle(state.doorT);
@@ -155,8 +166,9 @@ export function initScene({ canvas, state, tier, models }) {
     fireflies.material.uniforms.uTime.value = t;
     fireflies.material.uniforms.uOpacity.value = state.fireflies;
     post.setTime(t);
+    labels.update();
     post.composer.render();
   }
 
-  return { renderer, scene, camera, render };
+  return { renderer, scene, camera, render, labels, anchors: monuments.anchors };
 }
