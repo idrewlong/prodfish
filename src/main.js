@@ -9,6 +9,7 @@ import { createRouteState } from './world/route.js';
 import { CREDITS, BIO, CATALOG_URL } from './content/portfolio.js';
 import { initScroll } from './scroll.js';
 import { buildTimeline } from './timeline.js';
+import { trackHeightVh } from './journey.js';
 
 function webglAvailable() {
   try {
@@ -102,6 +103,12 @@ async function boot() {
   document.body.classList.add('ready');
 
   initScroll();
+
+  // Park the journey: until a road is chosen the document ends at the
+  // signpost. See src/journey.js for why this is a height change rather
+  // than a scroll interception.
+  const track = document.getElementById('scroll-track');
+  track.style.height = `${trackHeightVh(null, false)}vh`;
   let timeline = buildTimeline(state, state.route);
 
   // Switching routes rebuilds the timeline, because the door and altar sit at
@@ -112,7 +119,7 @@ async function boot() {
   // signpost. Without that pinning the camera would jump on every switch.
   const routeState = createRouteState((next) => {
     state.route = next;
-    document.getElementById('scroll-track').style.height = next === 'work' ? '1600vh' : '1000vh';
+    track.style.height = `${trackHeightVh(next, true)}vh`;
     timeline.scrollTrigger?.kill();
     timeline.kill();
     // Move the scroll position to the fork BEFORE building the new timeline.

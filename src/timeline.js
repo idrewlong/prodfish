@@ -2,6 +2,7 @@ import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { ACTS } from './choreography.js';
 import { tNearest, FORK, LANDMARKS, T_FORK_SCROLL } from './world/path.js';
+import { journeyDistancePx } from './journey.js';
 
 export function buildTimeline(state, route = 'direct') {
   gsap.registerPlugin(ScrollTrigger);
@@ -11,7 +12,13 @@ export function buildTimeline(state, route = 'direct') {
     scrollTrigger: {
       trigger: '#scroll-track',
       start: 'top top',
-      end: 'bottom bottom',
+      // Pinned to the full journey's distance, NOT to the element's height.
+      // The document is deliberately short before a road is chosen, and
+      // `bottom bottom` would squeeze the entire timeline -- church, altar
+      // and embed -- into those few screens. A fixed distance instead means
+      // a short document simply runs out partway, parking the camera at the
+      // fork. Function form so it re-measures on refresh/resize.
+      end: () => `+=${journeyDistancePx(route, window.innerHeight)}`,
       // fix-round: 1.2 -> 2 -- extra scrub lag smooths out residual scroll
       // jitter now that the approach pathT tween below is a single gentle
       // ease instead of two tweens with an accelerating tail.
