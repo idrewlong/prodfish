@@ -8,10 +8,8 @@ import { T_DOOR, T_GATE } from './world/path.js';
 import { CREDITS, BIO, CATALOG_URL, SOCIALS } from './content/portfolio.js';
 import { initScroll } from './scroll.js';
 import { buildTimeline } from './timeline.js';
-import { createPicker, pointerToNdc } from './picking.js';
 import { createPanels } from './panels.js';
 import { JOURNEY_VH } from './journey.js';
-import { ENGRAVED_STONE_INK, ENGRAVED_LIT } from './world/engraving.js';
 
 function webglAvailable() {
   try {
@@ -43,37 +41,6 @@ async function loadModels() {
   return { church, crow, cross, gravestoneA, gravestoneB, treeA, treeB, stones, bike };
 }
 
-// One picker, one kind of target: a carved stone opens its track.
-function attachStoneClicks(app, canvas) {
-  const picker = createPicker({ camera: app.camera });
-  picker.setTargets(app.creditStones);
-
-  let hovered = null;
-  const setHover = (stone) => {
-    if (hovered === stone) return;
-    if (hovered) hovered.userData.textMesh.material.color.setHex(ENGRAVED_STONE_INK);
-    hovered = stone;
-    if (hovered) hovered.userData.textMesh.material.color.setHex(ENGRAVED_LIT);
-    canvas.style.cursor = hovered ? 'pointer' : '';
-  };
-
-  const ndcFor = (e) => pointerToNdc(e.clientX, e.clientY, canvas.getBoundingClientRect());
-
-  // Hover is resolved at most once per frame: pointermove fires far faster
-  // than the scene renders, and a raycast per event is wasted work.
-  let queued = null;
-  canvas.addEventListener('pointermove', (e) => { queued = ndcFor(e); });
-  gsap.ticker.add(() => {
-    if (!queued) return;
-    setHover(picker.pick(queued));
-    queued = null;
-  });
-
-  canvas.addEventListener('click', (e) => {
-    const hit = picker.pick(ndcFor(e));
-    if (hit?.userData?.href) window.open(hit.userData.href, '_blank', 'noopener');
-  });
-}
 
 async function boot() {
   const state = createState();
@@ -89,10 +56,6 @@ async function boot() {
 
   initScroll();
   buildTimeline(state);
-
-  // The song stones along the approach open their track when clicked. This
-  // is the only in-world interaction left now that the signpost is gone.
-  attachStoneClicks(app, document.getElementById('scene'));
 
   gsap.ticker.add(() => app.render());
 }

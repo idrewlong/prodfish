@@ -30,11 +30,10 @@ export function initScene({ canvas, state, tier, models }) {
   const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 130);
 
   const world = buildWorld({ scene, models, grassCount: settings.grass, tier });
-  const monuments = buildMonuments({
-    scene,
-    stonesGltf: models.stones,
-    creditCount: 10,
-  });
+  // Grave markers flanking the approach. Ten of them: they used to carry one
+  // carved song title each, and the count is kept because it reads as an
+  // avenue rather than because it maps to anything now.
+  buildMonuments({ scene, stonesGltf: models.stones, creditCount: 10 });
   const crows = createCrows({
     scene, gltf: models.crow, roofline: world.roofline, count: settings.crows,
   });
@@ -164,5 +163,5 @@ export function initScene({ canvas, state, tier, models }) {
     post.composer.render();
   }
 
-  return { renderer, scene, camera, render, creditStones: monuments.creditStones };
+  return { renderer, scene, camera, render };
 }
