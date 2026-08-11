@@ -216,23 +216,6 @@ body.ready #loading { opacity: 0; pointer-events: none; }
 }
 .bs-link:hover { color: var(--bone); }
 
-.socials {
-  display: flex;
-  gap: 2.2rem;
-  margin-top: 1rem;
-}
-.socials a {
-  color: rgba(216, 211, 200, 0.55);
-  font-size: 0.72rem;
-  letter-spacing: 0.3em;
-  text-transform: uppercase;
-  text-decoration: none;
-  transition: color 0.3s, text-shadow 0.3s;
-}
-.socials a:hover {
-  color: var(--bone);
-  text-shadow: 0 0 16px rgba(193, 23, 15, 0.8);
-}
 
 .contact {
   font-size: 0.78rem;

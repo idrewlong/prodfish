@@ -26,34 +26,15 @@ const directCurve = new THREE.CatmullRomCurve3(
   0.5,
 );
 
-// A sampled point partway along the road. It was the fork when there were
-// two roads; it survives only as a convenient landmark for placing things
-// mid-approach.
-const T_MIDWAY = 0.389;
-export const FORK = directCurve.getPointAt(T_MIDWAY);
-
-// One road. `route` parameters remain on the exported functions so callers
-// that pass one keep working, but every value resolves to this curve.
-const CURVES = { direct: directCurve };
-export const ROUTES = ['direct'];
-
-function curveFor(route) {
-  return CURVES[route] ?? directCurve;
-}
-
-export function routeLength(route = 'direct') {
-  return curveFor(route).getLength();
-}
-
-export function positionAt(t, route = 'direct') {
-  return curveFor(route).getPointAt(THREE.MathUtils.clamp(t, 0, 1));
+export function positionAt(t) {
+  return directCurve.getPointAt(THREE.MathUtils.clamp(t, 0, 1));
 }
 
 // Look slightly ahead along the path; near the end, hold on the altar wall.
-export function targetAt(t, route = 'direct') {
+export function targetAt(t) {
   const tc = THREE.MathUtils.clamp(t, 0, 1);
   const ahead = Math.min(tc + 0.04, 1);
-  const p = curveFor(route).getPointAt(ahead);
+  const p = directCurve.getPointAt(ahead);
   // fix-round: was `if (ahead === 1) p.z -= 2` -- a step function that
   // snapped the look target back by 2m the instant t crossed 0.96 (where
   // tc + 0.04 first clamps to 1). That single-frame jump read as the
@@ -69,12 +50,12 @@ export function targetAt(t, route = 'direct') {
 }
 
 // Arc-length t whose point is nearest to `point` (sampled search).
-// Resolution note: 400 samples left a ~0.057m gap near the FORK parameter
-// (t ~= 0.389, where the curve's arc-length lookup table has more
-// approximation error), just over the 0.05m tolerance used in tests. 800
-// samples brings that to ~0.014m without changing any curve geometry.
-export function tNearest(point, route = 'direct') {
-  const c = curveFor(route);
+// Resolution note: 400 samples left a ~0.057m gap around t ~= 0.39, where
+// the curve's arc-length lookup table carries the most approximation error
+// -- just over the 0.05m tolerance used in tests. 800 samples brings that
+// to ~0.014m without changing any curve geometry.
+export function tNearest(point) {
+  const c = directCurve;
   let best = 0;
   let bestD = Infinity;
   for (let i = 0; i <= 800; i++) {

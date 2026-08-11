@@ -436,8 +436,8 @@ function buildBackdrop(scene, tier) {
 // far from the church so the two places read as different countries. This
 // reuses the graveyard's own grass geometry and placement helpers with
 // swampier parameters rather than introducing a second vegetation system.
-export const SWAMP_CENTRE = [0, 32];
-export const SWAMP_RADIUS = 20;
+export const SWAMP_CENTRE = [0, 30];
+export const SWAMP_RADIUS = 17;
 
 // Deterministic, and held clear of the camera corridor — the clearance test
 // is only meaningful against fixed positions.
@@ -488,17 +488,84 @@ export function swampTreeSpots() {
   ];
 }
 
+
+// Scum, silt and duckweed on standing water. Drawn once to a canvas and
+// tiled: the surface needs to look like something is floating on it, which
+// is what separates swamp water from a mirror.
+function makeWaterTexture() {
+  const size = 256;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#16211c';
+  ctx.fillRect(0, 0, size, size);
+
+  const rand = makeLcg(0x51117e2);
+  // Silt mottling: broad, soft, low contrast.
+  for (let i = 0; i < 90; i++) {
+    const r = 12 + rand() * 42;
+    const g = ctx.createRadialGradient(rand() * size, rand() * size, 0, 0, 0, r);
+    ctx.globalAlpha = 0.05 + rand() * 0.08;
+    ctx.fillStyle = rand() > 0.5 ? '#24322a' : '#0e1613';
+    ctx.beginPath();
+    ctx.arc(rand() * size, rand() * size, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // Duckweed: small green flecks gathered in drifts.
+  ctx.globalAlpha = 1;
+  for (let i = 0; i < 900; i++) {
+    const cx = rand() * size;
+    const cy = rand() * size;
+    ctx.fillStyle = rand() > 0.35 ? '#2c3d26' : '#374b2e';
+    ctx.globalAlpha = 0.25 + rand() * 0.5;
+    ctx.beginPath();
+    ctx.arc(cx, cy, 0.7 + rand() * 1.6, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(6, 6);
+  return tex;
+}
+
 function buildSwamp(scene, models, tier) {
-  // Still black water just below the ground plane, so the shoreline is the
-  // ground's own edge rather than a modelled bank.
+  // Standing swamp water. Two things it must NOT be: a black void (the first
+  // version, too dark and metallic to reflect anything in this scene) or a
+  // mirror (the second, a perfectly flat plane at low roughness, which is
+  // why it read as polished glass). Real still water in a marsh is mostly
+  // scattered surface detail -- duckweed, silt, broken reflections -- so
+  // this is a gently rippled surface with a procedural scum texture and low
+  // metalness, and it reads as water because of its DETAIL, not its shine.
+  const waterGeo = new THREE.CircleGeometry(SWAMP_RADIUS, 72, 1);
+  {
+    // Ripple the surface so it never behaves as one flat mirror. Amplitude
+    // is a couple of centimetres -- enough to break up specular highlights
+    // across the sheet, far too little to read as waves.
+    const pos = waterGeo.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i);
+      const y = pos.getY(i); // pre-rotation, this is world z
+      pos.setZ(
+        i,
+        Math.sin(x * 0.55 + y * 0.21) * 0.03
+          + Math.sin(x * 0.17 - y * 0.63 + 1.7) * 0.022
+          + Math.sin((x + y) * 1.3) * 0.008,
+      );
+    }
+    waterGeo.computeVertexNormals();
+  }
+
   const water = new THREE.Mesh(
-    new THREE.CircleGeometry(SWAMP_RADIUS, 56),
-    // Reads as still water catching the night sky, not a hole in the world.
-    // At #0a1110 with metalness 0.55 there was nothing in this scene for it
-    // to reflect, so it rendered as a black void the trail appeared to
-    // float over.
+    waterGeo,
     new THREE.MeshStandardMaterial({
-      color: '#26332f', roughness: 0.3, metalness: 0.25,
+      color: '#121b17',
+      map: makeWaterTexture(),
+      roughness: 0.78,
+      metalness: 0.05,
     }),
   );
   water.rotation.x = -Math.PI / 2;
@@ -885,6 +952,6 @@ export function buildWorld({ scene, models, grassCount = 0, tier = 'high' }) {
   };
 }
 
-export function normalizeProp(objScene, targetHeight) {
+function normalizeProp(objScene, targetHeight) {
   return normalize(objScene, targetHeight);
 }
