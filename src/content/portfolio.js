@@ -21,4 +21,12 @@ export const BIO =
   + 'room after midnight. Credits span independent releases and label work; '
   + 'the full catalog lives on BeatStars.';
 
+// Carved into the rider's chapel wall, and rendered as real links in the
+// static portfolio section for keyboard, screen-reader and crawler access.
+export const SOCIALS = [
+  { label: 'instagram', url: 'https://instagram.com/PLACEHOLDER' },
+  { label: 'youtube', url: 'https://youtube.com/@PLACEHOLDER' },
+  { label: 'tiktok', url: 'https://tiktok.com/@PLACEHOLDER' },
+];
+
 export const CATALOG_URL = 'https://www.beatstars.com/PLACEHOLDER';

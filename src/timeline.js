@@ -2,6 +2,7 @@ import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { ACTS, actsFor } from './choreography.js';
 import { tNearest, FORK, LANDMARKS, T_FORK_SCROLL, tRow } from './world/path.js';
+import { CHAPEL_T } from './world/chapelOfWork.js';
 import { journeyDistancePx } from './journey.js';
 
 // Candle ignition window (scroll fraction the candleT tween below runs
@@ -125,6 +126,9 @@ export function buildTimeline(state, route = 'direct') {
     const rowSpan = tRow('work');
     tl.to(state, { pathT: rowSpan.start, duration: acts.ride[1] - acts.ride[0], ease: 'sine.inOut' }, acts.ride[0])
       .to(state, { pathT: rowSpan.end, duration: acts.row[1] - acts.row[0], ease: 'none' }, acts.row[0])
+      // Through the rider's chapel: its own budget, paced like the row,
+      // because there is a wall of text to read while still moving.
+      .to(state, { pathT: CHAPEL_T + 0.03, duration: acts.chapelWork[1] - acts.chapelWork[0], ease: 'none' }, acts.chapelWork[0])
       .to(state, { pathT: APPROACH_END_T, duration: acts.return[1] - acts.return[0], ease: 'sine.inOut' }, acts.return[0]);
   } else {
     // The church road reaches the door straight after the fork. Guarded

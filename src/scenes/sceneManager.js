@@ -8,6 +8,8 @@ import { doorAngle } from '../world/events.js';
 import { createFireflies } from './particles.js';
 import { createPost } from './post.js';
 import { buildMonuments } from '../world/monuments.js';
+import { buildChapelOfWork } from '../world/chapelOfWork.js';
+import { normalizeProp } from '../world/world.js';
 import { createLabelLayer } from '../labels.js';
 
 export function initScene({ canvas, state, tier, models }) {
@@ -36,6 +38,17 @@ export function initScene({ canvas, state, tier, models }) {
     stonesGltf: models.stones,
     creditCount: 10,
   });
+  // The rider's chapel: destination of the scenic road. Built for every
+  // visitor, not just those who take that road -- it stands 60m out in the
+  // swamp, so it costs nothing on the church journey and avoids a
+  // build-on-demand path that would stutter mid-scroll.
+  const chapel = buildChapelOfWork({
+    scene,
+    riderGltf: models.rider,
+    bikeGltf: models.bike,
+    normalizeProp,
+  });
+
   const labels = createLabelLayer({
     container: document.getElementById('labels'),
     camera,
@@ -171,5 +184,6 @@ export function initScene({ canvas, state, tier, models }) {
   }
 
   return { renderer, scene, camera, render, labels, anchors: monuments.anchors, signArms: monuments.signArms,
-    creditStones: monuments.creditStones };
+    creditStones: monuments.creditStones,
+    chapelLinks: chapel.links };
 }

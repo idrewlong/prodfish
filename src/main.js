@@ -26,7 +26,7 @@ const prefersReduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 async function loadModels() {
   const load = createAssetLoader();
-  const [church, crow, cross, gravestoneA, gravestoneB, treeA, treeB, stones] = await Promise.all([
+  const [church, crow, cross, gravestoneA, gravestoneB, treeA, treeB, stones, rider, bike] = await Promise.all([
     load.required('/models/church.glb').catch((e) => {
       console.error('chapel failed to load', e);
       return null; // world.js builds a shell; loading screen still clears
@@ -38,8 +38,10 @@ async function loadModels() {
     load.optional('/models/tree-a.glb'),
     load.optional('/models/tree-b.glb'),
     load.optional('/models/grave-stones.glb'),
+    load.optional('/models/rider.glb'),
+    load.optional('/models/motorcycle.glb'),
   ]);
-  return { church, crow, cross, gravestoneA, gravestoneB, treeA, treeB, stones };
+  return { church, crow, cross, gravestoneA, gravestoneB, treeA, treeB, stones, rider, bike };
 }
 
 // The sign itself is the control: clicking the carved board picks that road.
@@ -56,7 +58,7 @@ function attachSignInteraction(app, routeState, canvas, pick) {
   const picker = createPicker({ camera: app.camera });
   // The picker resolves both the signpost's arms and the song stones: one
   // interaction vocabulary in the world rather than two.
-  picker.setTargets([...app.signArms, ...app.creditStones]);
+  picker.setTargets([...app.signArms, ...app.creditStones, ...app.chapelLinks]);
 
   let hovered = null;
   const setHover = (arm) => {

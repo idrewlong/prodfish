@@ -33,10 +33,16 @@ describe('actsFor', () => {
     );
   });
 
-  it('the scenic road adds the ride out, the row and the road back', () => {
+  it('the scenic road adds the ride, the row, the chapel and the road back', () => {
     expect(Object.keys(actsFor('work'))).toEqual(
-      ['arrival', 'approach', 'ride', 'row', 'return', 'threshold', 'chapel', 'beats'],
+      ['arrival', 'approach', 'ride', 'row', 'chapelWork', 'return', 'threshold', 'chapel', 'beats'],
     );
+  });
+
+  it('gives the rider’s chapel enough scroll to read a wall of text', () => {
+    const acts = actsFor('work');
+    const vh = (acts.chapelWork[1] - acts.chapelWork[0]) * JOURNEY_VH.work;
+    expect(vh).toBeGreaterThan(400);
   });
 });
 

@@ -7,7 +7,7 @@ import { T_FORK_SCROLL } from './world/path.js';
 // scroll to hold a comparable pace. Sizing this by feel rather than by the
 // road's measured length is what produced the earlier "it speeds up way too
 // much" complaints.
-export const JOURNEY_VH = { direct: 1000, work: 4500 };
+export const JOURNEY_VH = { direct: 1000, work: 5000 };
 
 const VIEWPORT_VH = 100;
 

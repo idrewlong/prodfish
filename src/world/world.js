@@ -731,6 +731,6 @@ export function buildWorld({ scene, models, grassCount = 0, tier = 'high' }) {
   };
 }
 
-function normalizeProp(objScene, targetHeight) {
+export function normalizeProp(objScene, targetHeight) {
   return normalize(objScene, targetHeight);
 }

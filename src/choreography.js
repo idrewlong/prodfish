@@ -18,11 +18,12 @@ const WORK_ACTS = {
   arrival:   [0.00, 0.10],
   approach:  [0.10, 0.30], // to the signpost — same fraction as the direct road
   ride:      [0.30, 0.40], // out across the field into the low ground
-  row:       [0.40, 0.72], // the monument walk: slowest pace on the site
-  return:    [0.72, 0.88], // the long road back toward the church
-  threshold: [0.88, 0.94], // through the door
-  chapel:    [0.94, 0.98],
-  beats:     [0.98, 1.00],
+  row:       [0.40, 0.66], // the monument walk: slowest pace on the site
+  chapelWork:[0.66, 0.78], // through the rider's chapel: a wall to read
+  return:    [0.78, 0.90], // the long road back toward the church
+  threshold: [0.90, 0.95], // through the church door
+  chapel:    [0.95, 0.985],
+  beats:     [0.985, 1.00],
 };
 
 export function actsFor(route) {
