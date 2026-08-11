@@ -18,7 +18,7 @@ verbatim (from each model's downloaded `license.txt`):
 > Alexei Ostapenko (https://sketchfab.com/alexanders823) licensed under
 > CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
 
-## AI-generated assets
+## AI-generated / supplied assets
 
 The following models were generated with Higgsfield (image-to-3D) for this
 project in August 2026. As original AI-generated works produced for this
@@ -29,6 +29,9 @@ site, no attribution is required:
 - Gravestone B
 - Tree A
 - Tree B
+
+- **Grave stones set (10 markers)** — supplied by the site owner for this
+  project, 2026-08. Used for the portfolio monument row.
 
 ## Processing
 

@@ -43,7 +43,18 @@ const PROP_TRIANGLE_BUDGET = {
   'gravestone-b': 3000,
   'tree-a': 3000,
   'tree-b': 3000,
+  // Ten separate markers in one file, so this budget covers all ten -- the
+  // per-prop 3000 would flatten the whole set.
+  'grave-stones': 8000,
 };
+
+// Models whose consumers depend on distinct mesh boundaries surviving the
+// build (e.g. one marker placed per credit). `gltf-transform optimize`
+// defaults `--join` to true, which merges compatible meshes/nodes to
+// reduce draw calls -- exactly the opposite of what's needed here, and it
+// silently collapses a 10-mesh file down to 1 with no error. Listed models
+// get `--join false` to keep every source mesh intact.
+const PRESERVE_MESHES = new Set(['grave-stones']);
 
 mkdirSync(OUT, { recursive: true });
 
@@ -64,12 +75,22 @@ async function simplifyToBudget(input, output, budget) {
           ? srcIndices.getArray()
           : new Uint32Array(srcIndices.getArray());
 
+      // The budget is a per-file (not per-primitive) target. Multi-mesh
+      // files like grave-stones divide it across many small primitives, so
+      // a single primitive can already sit under `budget` -- clamp the
+      // target to this primitive's own index count, since
+      // MeshoptSimplifier.simplifySloppy asserts target_index_count <=
+      // indices.length and a primitive already under budget needs no
+      // further simplification.
+      const targetIndexCount = Math.min(budget * 3, indicesArray.length);
+      if (targetIndexCount >= indicesArray.length) continue;
+
       const [dstIndices] = MeshoptSimplifier.simplifySloppy(
         indicesArray,
         positionArray,
         3,
         null,
-        budget * 3,
+        targetIndexCount,
         1, // target error: unconstrained -- target index count drives the result
       );
       srcIndices.setArray(dstIndices);
@@ -108,7 +129,7 @@ for (const entry of readdirSync(SRC, { withFileTypes: true })) {
   execSync(
     `npx gltf-transform optimize "${optimizeInput}" "${out}" --compress draco --texture-compress webp --texture-size ${textureSize}${
       budget ? ' --simplify false' : ''
-    }`,
+    }${PRESERVE_MESHES.has(name) ? ' --join false' : ''}`,
     { stdio: 'inherit' },
   );
 }
