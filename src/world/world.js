@@ -321,6 +321,12 @@ export function swampReedSpots(count) {
   return spots;
 }
 
+// An abandoned bike left by the trail — the one survivor of the retired
+// rider's chapel, kept because a wrecked machine at the roadside is pure
+// southern gothic and the asset already exists. Measured 3.11m clear of the
+// camera corridor.
+export const BIKE_SPOT = [3.6, 11.0, -0.7];
+
 // Cypress-style dead trees standing back from the approach, deterministic
 // and clear of the camera corridor.
 export function swampTreeSpots() {
@@ -388,6 +394,15 @@ function buildSwamp(scene, models, tier) {
   mesh.count = spots.length;
   mesh.instanceMatrix.needsUpdate = true;
   scene.add(mesh);
+
+  // The abandoned bike, if it loaded.
+  if (models.bike) {
+    const [bx, bz, brot] = BIKE_SPOT;
+    const bike = normalizeProp(models.bike.scene.clone(true), 1.15);
+    bike.position.set(bx, 0, bz);
+    bike.rotation.y = brot;
+    scene.add(bike);
+  }
 
   // Dead trees, reusing whichever tree model loaded.
   const treeSrc = models.treeA?.scene ?? models.treeB?.scene ?? silhouette('tree');

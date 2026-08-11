@@ -26,7 +26,7 @@ const prefersReduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 async function loadModels() {
   const load = createAssetLoader();
-  const [church, crow, cross, gravestoneA, gravestoneB, treeA, treeB, stones, rider, bike] = await Promise.all([
+  const [church, crow, cross, gravestoneA, gravestoneB, treeA, treeB, stones, bike] = await Promise.all([
     load.required('/models/church.glb').catch((e) => {
       console.error('chapel failed to load', e);
       return null; // world.js builds a shell; loading screen still clears
@@ -38,10 +38,9 @@ async function loadModels() {
     load.optional('/models/tree-a.glb'),
     load.optional('/models/tree-b.glb'),
     load.optional('/models/grave-stones.glb'),
-    load.optional('/models/rider.glb'),
     load.optional('/models/motorcycle.glb'),
   ]);
-  return { church, crow, cross, gravestoneA, gravestoneB, treeA, treeB, stones, rider, bike };
+  return { church, crow, cross, gravestoneA, gravestoneB, treeA, treeB, stones, bike };
 }
 
 // One picker, one kind of target: a carved stone opens its track.

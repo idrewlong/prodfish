@@ -41,7 +41,7 @@ Higgsfield-generated props were additionally simplified to a fixed triangle
 budget (<=3,000 triangles each, <=4,000 for the cross) to fit the scene's
 overall rendering budget; no other modifications were made to church or
 crow beyond compression.
-- **Hooded rider figure** and **chopper motorcycle** — generated with
-  Higgsfield AI for this project, 2026-08. Original designs: a gaunt hooded
-  skeletal rider and a weathered chopper. Deliberately NOT modelled on, and
-  not intended to resemble, any existing copyrighted character.
+- **Chopper motorcycle** — generated with Higgsfield AI for this project,
+  2026-08. An original design, deliberately not modelled on any existing
+  copyrighted character or machine. (A companion rider figure was generated
+  alongside it and later retired with the building it stood in.)

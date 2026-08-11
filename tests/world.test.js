@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   PROP_SPOTS, minPathClearance, roadEndT, roadSampleCount,
-  SWAMP_CENTRE, SWAMP_RADIUS, swampReedSpots, swampTreeSpots,
+  SWAMP_CENTRE, SWAMP_RADIUS, swampReedSpots, swampTreeSpots, BIKE_SPOT,
 } from '../src/world/world.js';
 import { positionAt } from '../src/world/path.js';
 
@@ -58,5 +58,17 @@ describe('the swamp', () => {
     };
     for (const [x, z] of swampReedSpots(80)) expect(clearance(x, z)).toBeGreaterThan(1.0);
     for (const [x, z] of swampTreeSpots()) expect(clearance(x, z)).toBeGreaterThan(2.0);
+  });
+});
+
+describe('the abandoned bike', () => {
+  it('sits clear of the camera corridor', () => {
+    const [x, z] = BIKE_SPOT;
+    let min = Infinity;
+    for (let i = 0; i <= 300; i++) {
+      const p = positionAt(i / 300);
+      min = Math.min(min, Math.hypot(p.x - x, p.z - z));
+    }
+    expect(min).toBeGreaterThan(2.0);
   });
 });
