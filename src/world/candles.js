@@ -139,7 +139,7 @@ export function createCandles({ scene, altarAnchor, crossGltf, maxLights }) {
         const idx = litIdx[litIdx.length - 1 - j];
         if (idx === undefined) { l.intensity = 0; return; }
         const side = idx % 2 === 0 ? -1 : 1;
-        l.position.set(side * 0.9, 0.95, -2.6 - (idx / TOTAL) * 7.4);
+        l.position.set(side * 0.9, 0.95, CANDLE_Z0 - (idx / TOTAL) * CANDLE_Z_SPAN);
         // task-12: was 3.2, doubled while fighting the post.js gamma bug
         // (see world.js light comments) — 1.6 reads correctly now that the
         // final pass actually encodes to sRGB.
