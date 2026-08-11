@@ -54,7 +54,9 @@ async function loadModels() {
 // are gone.
 function attachSignInteraction(app, routeState, canvas, pick) {
   const picker = createPicker({ camera: app.camera });
-  picker.setTargets(app.signArms);
+  // The picker resolves both the signpost's arms and the song stones: one
+  // interaction vocabulary in the world rather than two.
+  picker.setTargets([...app.signArms, ...app.creditStones]);
 
   let hovered = null;
   const setHover = (arm) => {
@@ -71,7 +73,6 @@ function attachSignInteraction(app, routeState, canvas, pick) {
   // than the scene renders, and a raycast per event is wasted work.
   let queued = null;
   canvas.addEventListener('pointermove', (e) => {
-    if (routeState.isLocked()) { setHover(null); return; }
     queued = ndcFor(e);
   });
   gsap.ticker.add(() => {
@@ -81,9 +82,17 @@ function attachSignInteraction(app, routeState, canvas, pick) {
   });
 
   canvas.addEventListener('click', (e) => {
+    const hit = picker.pick(ndcFor(e));
+    if (!hit) return;
+    // A stone opens its track. Stones stay clickable after the fork locks --
+    // the lock only governs which road you are on, not whether you can read
+    // the markers along it.
+    if (hit.userData.href) {
+      window.open(hit.userData.href, '_blank', 'noopener');
+      return;
+    }
     if (routeState.isLocked()) return;
-    const arm = picker.pick(ndcFor(e));
-    if (arm) pick(arm.userData.route);
+    if (hit.userData.route) pick(hit.userData.route);
   });
 
   // Keyboard and screen-reader path: the same two choices as real controls.
@@ -117,18 +126,12 @@ function attachChooseHint(routeState) {
 function attachCreditLabels(app, state) {
   const onWorkRoute = () => state.route === 'work';
 
-  app.anchors.credits.forEach((anchor, i) => {
-    const credit = CREDITS[i];
-    if (!credit) return;
-    const a = document.createElement('a');
-    a.className = 'label';
-    a.href = credit.url;
-    a.target = '_blank';
-    a.rel = 'noopener';
-    a.innerHTML = `${credit.artist}<span class="label-track"></span>`;
-    a.querySelector('.label-track').textContent = credit.track;
-    app.labels.add({ anchor, el: a, when: onWorkRoute });
-  });
+  // The credits themselves are no longer floating labels: they are carved
+  // into the faces of the stones (see world/monuments.js) and the stones are
+  // clickable. Along a row of ten they used to pile up on top of one another
+  // and read as web furniture stuck over the world. They remain in the DOM
+  // as real links in the static portfolio section, which is what keyboard
+  // users, screen readers and crawlers get.
 
   const crypt = document.createElement('div');
   crypt.className = 'label label-crypt';

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { positionAt, targetAt, tNearest, FORK } from './path.js';
 import { makeEngravedTexture, ENGRAVED_INK } from './engraving.js';
+import { CREDITS } from '../content/portfolio.js';
 
 // Ten markers flanking the monument row on the long swamp road, alternating
 // sides so the walk reads as an avenue. Deterministic — the clearance test
@@ -222,6 +223,7 @@ export function buildMonuments({ scene, stonesGltf, creditCount }) {
   }
 
   const credits = [];
+  const creditStones = [];
   const count = Math.min(creditCount, MONUMENT_SPOTS.length);
   for (let i = 0; i < count; i++) {
     const [x, z, rotY, s] = MONUMENT_SPOTS[i];
@@ -231,7 +233,38 @@ export function buildMonuments({ scene, stonesGltf, creditCount }) {
     stone.rotation.y = rotY;
     scene.add(stone);
     credits.push(new THREE.Vector3(x, STONE_HEIGHT * s + 0.45, z));
+
+    // The song title is cut into the face of the stone, the same way the
+    // signpost's words are: the canvas carries letterform alpha only and the
+    // material colour is the ink, so a hover can light it without redrawing
+    // anything. This replaces the floating HTML labels, which piled up on
+    // top of each other along the row and read as web furniture stuck over
+    // the world rather than part of it.
+    const credit = CREDITS[i];
+    if (credit) {
+      const plate = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.78, 0.2),
+        new THREE.MeshBasicMaterial({
+          map: makeEngravedTexture(credit.track, { widthPx: 512, heightPx: 132, basePx: 62 }),
+          transparent: true,
+          color: ENGRAVED_INK,
+          depthWrite: false,
+        }),
+      );
+      // On the face of the stone, a little above its middle, standing just
+      // proud of the surface so it never z-fights with the carving beneath.
+      plate.position.set(0, STONE_HEIGHT * s * 0.66, 0.42);
+      stone.add(plate);
+      stone.userData.href = credit.url;
+      stone.userData.label = `${credit.artist} — ${credit.track}`;
+      stone.userData.textMesh = plate;
+      creditStones.push(stone);
+    }
   }
 
-  return { anchors: { sign: sign.anchor, credits, crypt: crypt.anchor }, signArms: sign.arms };
+  return {
+    anchors: { sign: sign.anchor, credits, crypt: crypt.anchor },
+    signArms: sign.arms,
+    creditStones,
+  };
 }
