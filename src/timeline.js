@@ -4,6 +4,50 @@ import { ACTS } from './choreography.js';
 import { tNearest, FORK, LANDMARKS, T_FORK_SCROLL } from './world/path.js';
 import { journeyDistancePx } from './journey.js';
 
+// Candle ignition window (scroll fraction the candleT tween below runs
+// over). candleIntensity() in world/events.js turns candleT into a
+// per-candle fade using `start_i = (i/TOTAL)*0.85`, so candle i visibly
+// starts catching light at scroll `CANDLE_IGNITE_START + start_i *
+// CANDLE_IGNITE_DURATION`.
+//
+// MEASURED against the live scene (window.__camera.position.z read back at
+// scroll fractions via a headless driver, cross-checked by replaying this
+// exact tween chain offline against positionAt() from world/path.js -- the
+// two agreed to within 0.001 scroll):
+//   - the camera crosses the doorway plane (z=0) at scroll ~0.559, not the
+//     ~0.75 an earlier hand-derivation assumed. That earlier number drove a
+//     "fix" (ignition window 0.747-0.851) that was never implemented, which
+//     is lucky: at scroll 0.747 the camera's real z is already ~-6.7 --
+//     candle 0 (z=-2.6) would have been passed by ~4m before its wave even
+//     reached it, reproducing the same bug it was meant to fix.
+//   - the OLD window here (chapelStart + 0.02 = 0.64, duration
+//     (chapelEnd-chapelStart)*0.9 = 0.18 -> runs 0.64..0.82) was likewise
+//     never "outside, behind the facade" -- the camera is already 3m past
+//     the door (z=-3.19) by scroll 0.64. The real defect: it gave the first
+//     five candles (z=-2.6..-4.71, nearest the door -- exactly what a
+//     visitor notices first) a NEGATIVE lead of up to -0.9m, i.e. candleT
+//     didn't even start moving off zero until the camera had already
+//     walked past them. That matches the report exactly: candles only
+//     caught faintly on a slow reverse-scroll, because forward-scrolling
+//     visitors never saw them catch.
+//   - this window instead starts candle 0 right after the camera crosses
+//     the (by-then fully open, see doorT tween below) doorway, giving every
+//     candle 1.8-2.5m of lead before the camera reaches it. Fit by
+//     bisecting each candle's target scroll against the real curve, then
+//     solving START/DURATION to hit candle 0's and candle 13's targets
+//     exactly (candleIntensity's schedule is linear in i, so the fit can't
+//     hit all 14 exactly) -- max deviation from the in-between candles'
+//     individual targets is ~0.02 scroll (~7.9% of the window), still
+//     leaving every candle's lead comfortably positive (see
+//     tests/candle-timing.test.js).
+//
+// Do not "tidy" these back toward the chapel act boundary (0.62) or later
+// without re-measuring camera z against candle z first -- both of the
+// window's previous positions looked more "principled" on paper and both
+// reintroduced the reported bug.
+export const CANDLE_IGNITE_START = 0.561;
+export const CANDLE_IGNITE_DURATION = 0.248;
+
 export function buildTimeline(state, route = 'direct') {
   gsap.registerPlugin(ScrollTrigger);
 
@@ -91,7 +135,13 @@ export function buildTimeline(state, route = 'direct') {
   // single tween spanning both acts' full span removes the seam: one
   // continuous decelerating push all the way to the altar stop.
   tl.to(state, { pathT: 1, duration: 1 - chapelStart, ease: 'sine.out' }, chapelStart)
-    .to(state, { candleT: 1, duration: (chapelEnd - chapelStart) * 0.9 }, chapelStart + 0.02)
+    // CANDLE_IGNITE_START (0.561) is a GSAP absolute position, not "+=" off
+    // chapelStart -- it deliberately falls inside the THRESHOLD act's own
+    // range (0.45-0.62), not this one, because that's where the camera
+    // actually is relative to the candles (see the constant's comment
+    // above). Declared here anyway, next to pathT, since it's the chapel's
+    // effect even though it starts a beat early.
+    .to(state, { candleT: 1, duration: CANDLE_IGNITE_DURATION }, CANDLE_IGNITE_START)
     .to(state, { swayAmp: 0.3, duration: 0.1 }, chapelStart);
 
   // ACT 5 — BEATS: settle before the altar; camera motion is the single

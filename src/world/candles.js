@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { candleIntensity } from './events.js';
 
-const TOTAL = 14;
+export const TOTAL = 14;
 
 // Soft radial-gradient texture shared by every flame/halo sprite. Sprites
 // always face the camera (unlike a static plane, which can foreshorten to a
@@ -27,8 +27,8 @@ function makeGlowTexture() {
 // the altar. Shared by the placement loop below and the light-pool tracking
 // in update() -- kept as a named constant (not re-derived) so the two stay
 // in sync by construction.
-const CANDLE_Z0 = -2.6;
-const CANDLE_Z_SPAN = 7.4;
+export const CANDLE_Z0 = -2.6;
+export const CANDLE_Z_SPAN = 7.4;
 
 // Candle rows flank the aisle (x = ±0.9) from just inside the door to the
 // altar. Flames are camera-facing additive sprites; a small pool of real
