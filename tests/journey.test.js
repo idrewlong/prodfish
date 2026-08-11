@@ -27,8 +27,8 @@ describe('journey sizing', () => {
   });
 
   it('journey distance is the scrollable pixels of the full route', () => {
-    expect(journeyDistancePx('direct', 800)).toBe((1000 / 100 - 1) * 800);
-    expect(journeyDistancePx('work', 800)).toBe((1600 / 100 - 1) * 800);
+    expect(journeyDistancePx('direct', 800)).toBe((JOURNEY_VH.direct / 100 - 1) * 800);
+    expect(journeyDistancePx('work', 800)).toBe((JOURNEY_VH.work / 100 - 1) * 800);
   });
 
   it('journey distance ignores how tall the document currently is', () => {

@@ -1,7 +1,7 @@
 import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
-import { ACTS } from './choreography.js';
-import { tNearest, FORK, LANDMARKS, T_FORK_SCROLL } from './world/path.js';
+import { ACTS, actsFor } from './choreography.js';
+import { tNearest, FORK, LANDMARKS, T_FORK_SCROLL, tRow } from './world/path.js';
 import { journeyDistancePx } from './journey.js';
 
 // Candle ignition window (scroll fraction the candleT tween below runs
@@ -70,10 +70,26 @@ export function buildTimeline(state, route = 'direct') {
     },
   });
 
-  const [, arrivalEnd] = ACTS.arrival;
-  const [approachStart, approachEnd] = ACTS.approach;
-  const [thresholdStart, thresholdEnd] = ACTS.threshold;
-  const [chapelStart, chapelEnd] = ACTS.chapel;
+  const acts = actsFor(route);
+  const [, arrivalEnd] = acts.arrival;
+  const [approachStart, approachEnd] = acts.approach;
+  const [thresholdStart, thresholdEnd] = acts.threshold;
+  const [chapelStart, chapelEnd] = acts.chapel;
+
+  // The candle window was measured in absolute scroll fractions against the
+  // DIRECT road. The work road puts its interior somewhere else entirely
+  // (its threshold act starts at 0.80, not 0.45), so reusing those absolute
+  // numbers would fire the whole wave while the camera was still out in the
+  // swamp. Both roads share the identical DOOR_FRONT -> ALTAR_STOP geometry
+  // and the same threshold/chapel tween structure, so the window transfers
+  // correctly when expressed as a FRACTION of the interior span instead.
+  const DIRECT = ACTS;
+  const directSpan = DIRECT.chapel[1] - DIRECT.threshold[0];
+  const igniteStartFrac = (CANDLE_IGNITE_START - DIRECT.threshold[0]) / directSpan;
+  const igniteDurFrac = CANDLE_IGNITE_DURATION / directSpan;
+  const interiorSpan = chapelEnd - thresholdStart;
+  const igniteStart = thresholdStart + igniteStartFrac * interiorSpan;
+  const igniteDuration = igniteDurFrac * interiorSpan;
 
   // Landmark parameters differ per route (the scenic route is longer, so the
   // door sits at a different fraction of it), so they are resolved per build
@@ -99,9 +115,27 @@ export function buildTimeline(state, route = 'direct') {
   // SAME scroll fraction (T_FORK_SCROLL) even though forkT differs between
   // them — that is what lets a route switch preserve the camera's position
   // and the reader's scroll position at the same time.
-  tl.to(state, { pathT: forkT, duration: T_FORK_SCROLL - approachStart, ease: 'sine.inOut' }, approachStart)
-    .to(state, { pathT: APPROACH_END_T, duration: approachEnd - T_FORK_SCROLL, ease: 'sine.inOut' }, T_FORK_SCROLL)
-    .to(state, { fog: 0.04, duration: approachEnd - approachStart }, approachStart)
+  tl.to(state, { pathT: forkT, duration: T_FORK_SCROLL - approachStart, ease: 'sine.inOut' }, approachStart);
+
+  if (acts.ride && acts.row && acts.return) {
+    // THE SCENIC ROAD. Its own stretches, because inheriting the church
+    // road's boundaries is what crushed the monument row into a tenth of the
+    // scroll. The row is deliberately the slowest thing on the site: it is
+    // the one place a visitor is meant to read rather than travel.
+    const rowSpan = tRow('work');
+    tl.to(state, { pathT: rowSpan.start, duration: acts.ride[1] - acts.ride[0], ease: 'sine.inOut' }, acts.ride[0])
+      .to(state, { pathT: rowSpan.end, duration: acts.row[1] - acts.row[0], ease: 'none' }, acts.row[0])
+      .to(state, { pathT: APPROACH_END_T, duration: acts.return[1] - acts.return[0], ease: 'sine.inOut' }, acts.return[0]);
+  } else {
+    // The church road reaches the door straight after the fork. Guarded
+    // because on the scenic road this tween's duration would be zero (its
+    // approach act ENDS at the fork), and a zero-duration tween to
+    // APPROACH_END_T would snap the camera to the church doorway the instant
+    // the visitor passed the signpost.
+    tl.to(state, { pathT: APPROACH_END_T, duration: approachEnd - T_FORK_SCROLL, ease: 'sine.inOut' }, T_FORK_SCROLL);
+  }
+
+  tl.to(state, { fog: 0.04, duration: approachEnd - approachStart }, approachStart)
     .to(state, { swayAmp: 0.5, duration: approachEnd - approachStart }, approachStart)
     .to(state, { crowT: 1, duration: 0.14 }, 0.28);
 
@@ -141,7 +175,7 @@ export function buildTimeline(state, route = 'direct') {
     // actually is relative to the candles (see the constant's comment
     // above). Declared here anyway, next to pathT, since it's the chapel's
     // effect even though it starts a beat early.
-    .to(state, { candleT: 1, duration: CANDLE_IGNITE_DURATION }, CANDLE_IGNITE_START)
+    .to(state, { candleT: 1, duration: igniteDuration }, igniteStart)
     .to(state, { swayAmp: 0.3, duration: 0.1 }, chapelStart);
 
   // ACT 5 — BEATS: settle before the altar; camera motion is the single

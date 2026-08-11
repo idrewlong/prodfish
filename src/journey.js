@@ -2,7 +2,12 @@ import { T_FORK_SCROLL } from './world/path.js';
 
 // How much scroll each road is worth. The scenic route covers more ground,
 // so it needs more scroll to hold the same unhurried pace.
-export const JOURNEY_VH = { direct: 1000, work: 1600 };
+// The work road is ~2.9x the direct road's length AND has to give the monument row a
+// deliberately slow stretch, so it needs proportionally more
+// scroll to hold a comparable pace. Sizing this by feel rather than by the
+// road's measured length is what produced the earlier "it speeds up way too
+// much" complaints.
+export const JOURNEY_VH = { direct: 1000, work: 4500 };
 
 const VIEWPORT_VH = 100;
 
