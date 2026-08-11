@@ -116,28 +116,35 @@ export function buildChapelOfWork({ scene, riderGltf, bikeGltf, normalizeProp })
   farWall.position.z = DOOR_DISTANCE;
   group.add(nearWall, farWall);
 
-  // The bio and the links are carved into the LEFT wall, so they face the
-  // camera side-on as it drifts through rather than flashing past head-on.
+  // Carved into the FAR wall, flanking the doorway the road leaves by, and
+  // turned to face the incoming camera. An earlier version put them on a
+  // side wall reasoning they would be read side-on while drifting past --
+  // but the camera looks FORWARD along the road, so a side wall never
+  // enters frame and the whole wall of text was invisible.
   const panels = new THREE.Group();
-  panels.position.set(-ROOM_W / 2 + 0.2, 0, 0);
-  panels.rotation.y = Math.PI / 2;
+  panels.position.set(0, 0, DOOR_DISTANCE - 0.22);
+  panels.rotation.y = Math.PI;
 
-  const bio = carvedPanel(BIO.split('. ')[0], 5.4, 44);
-  bio.position.set(-2.4, 2.5, 0);
+  const bio = carvedPanel(BIO.split('. ')[0], 6.2, 40);
+  bio.position.set(0, 3.35, 0);
   panels.add(bio);
 
   const links = [];
+  const sideX = DOOR_W / 2 + (ROOM_W - DOOR_W) / 4;
   SOCIALS.forEach((social, i) => {
-    const panel = carvedPanel(social.label, 2.1, 76);
-    panel.position.set(-2.4 + i * 2.3, 1.45, 0);
+    const panel = carvedPanel(social.label, 1.9, 82);
+    // Stacked either side of the doorway, alternating, so none sits in the
+    // opening the camera passes through.
+    panel.position.set(i % 2 === 0 ? -sideX : sideX, 2.35 - Math.floor(i / 2) * 0.62, 0);
     panel.userData.href = social.url;
     panel.userData.textMesh = panel;
     panels.add(panel);
     links.push(panel);
   });
 
-  const catalog = carvedPanel('the full catalog', 2.6, 76);
-  catalog.position.set(2.6, 2.5, 0);
+  const catalog = carvedPanel('the full catalog', 2.0, 82);
+  catalog.position.set(SOCIALS.length % 2 === 0 ? -sideX : sideX,
+    2.35 - Math.floor(SOCIALS.length / 2) * 0.62, 0);
   catalog.userData.href = CATALOG_URL;
   catalog.userData.textMesh = catalog;
   panels.add(catalog);
@@ -147,10 +154,14 @@ export function buildChapelOfWork({ scene, riderGltf, bikeGltf, normalizeProp })
 
   // A low fire glow rather than the church's red neon, so the two interiors
   // read as different places.
-  const fire = new THREE.PointLight('#ff7a2a', 9, 16, 1.8);
-  fire.position.set(1.6, 1.5, 1.0);
+  // The fire has to light a wall of text at the far end, so it sits toward
+  // that end rather than beside the entrance.
+  const fire = new THREE.PointLight('#ff7a2a', 26, 26, 1.5);
+  fire.position.set(1.8, 1.9, DOOR_DISTANCE - 3.2);
   group.add(fire);
-  group.add(new THREE.PointLight('#ffb066', 3.5, 10, 2));
+  const fill = new THREE.PointLight('#ffb066', 12, 18, 1.6);
+  fill.position.set(-1.2, 2.4, 0);
+  group.add(fill);
 
   scene.add(group);
 

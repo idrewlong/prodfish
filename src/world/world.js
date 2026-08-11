@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { positionAt, T_DOOR, tNearest, LANDMARKS } from './path.js';
+import { CHAPEL_CENTRE } from './chapelOfWork.js';
 
 // Night sky/fog tone, shared with sceneManager.js. Deliberately NOT applied
 // through ACES Filmic tone mapping for the sky dome below: at the exposure
@@ -299,6 +300,10 @@ function buildGrass(scene, count) {
 export const SWAMP_CENTRE = [42, 18];
 export const SWAMP_RADIUS = 24;
 
+// Radius of bare, trodden ground around the rider's chapel — comfortably
+// past its 7x11m footprint's half-diagonal (~6.5m).
+export const CHAPEL_KEEP_OUT = 7.5;
+
 // Deterministic, and held clear of the camera corridor — the clearance test
 // is only meaningful against fixed positions.
 export function swampReedSpots(count) {
@@ -318,7 +323,11 @@ export function swampReedSpots(count) {
       const d = Math.hypot(p.x - x, p.z - z);
       if (d < min) min = d;
     }
-    if (min > 1.3) spots.push([+x.toFixed(2), +z.toFixed(2)]);
+    // Keep reeds out of the rider's chapel: the swamp is scattered before
+    // the building exists as far as this generator is concerned, and
+    // without this they grow up through its floor and stand inside the room.
+    const fromChapel = Math.hypot(x - CHAPEL_CENTRE[0], z - CHAPEL_CENTRE[1]);
+    if (min > 1.3 && fromChapel > CHAPEL_KEEP_OUT) spots.push([+x.toFixed(2), +z.toFixed(2)]);
   }
   return spots;
 }

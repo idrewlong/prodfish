@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import {
   PROP_SPOTS, minPathClearance, roadEndT, roadSampleCount,
-  SWAMP_CENTRE, SWAMP_RADIUS, swampReedSpots, swampTreeSpots,
+  SWAMP_CENTRE, SWAMP_RADIUS, swampReedSpots, swampTreeSpots, CHAPEL_KEEP_OUT,
 } from '../src/world/world.js';
+import { CHAPEL_CENTRE } from '../src/world/chapelOfWork.js';
 import { positionAt } from '../src/world/path.js';
 
 describe('PROP_SPOTS', () => {
@@ -58,5 +59,14 @@ describe('the swamp', () => {
     };
     for (const [x, z] of swampReedSpots(80)) expect(clearance(x, z)).toBeGreaterThan(1.0);
     for (const [x, z] of swampTreeSpots()) expect(clearance(x, z)).toBeGreaterThan(2.0);
+  });
+});
+
+describe('the rider’s chapel clearing', () => {
+  it('keeps reeds from growing inside the building', () => {
+    for (const [x, z] of swampReedSpots(200)) {
+      const d = Math.hypot(x - CHAPEL_CENTRE[0], z - CHAPEL_CENTRE[1]);
+      expect(d).toBeGreaterThan(CHAPEL_KEEP_OUT);
+    }
   });
 });
