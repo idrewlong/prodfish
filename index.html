@@ -22,38 +22,53 @@
   </header>
 
   <main id="scroll-track">
-    <section id="work" aria-labelledby="work-title">
-      <h2 id="work-title" class="chapel-title">the work</h2>
-      <ul class="work-list"></ul>
-      <p class="work-bio"></p>
-      <nav class="work-socials" aria-label="social links"></nav>
-      <a class="bs-link work-catalog" target="_blank" rel="noopener">the full catalog ↗</a>
-    </section>
-
     <section id="chapel">
-      <h2 class="chapel-title">the beats</h2>
-      <div class="altar-frame">
-        <iframe
-          src="https://player.beatstars.com/?storeId=PLACEHOLDER"
-          title="prodfish beats on BeatStars"
-          loading="lazy"
-          allow="autoplay"
-        ></iframe>
+      <div class="panels" role="group" aria-roledescription="carousel" aria-label="beats, credits and about">
+        <button class="panel-arrow panel-prev" type="button" aria-label="previous">&#8249;</button>
+        <button class="panel-arrow panel-next" type="button" aria-label="next">&#8250;</button>
+
+        <div class="panel-viewport">
+          <div class="panel-strip">
+
+            <article class="panel" id="panel-beats" aria-label="beats">
+              <h2 class="chapel-title">the beats</h2>
+              <div class="altar-frame">
+                <iframe
+                  src="https://player.beatstars.com/?storeId=PLACEHOLDER"
+                  title="prodfish beats on BeatStars"
+                  loading="lazy"
+                  allow="autoplay"
+                ></iframe>
+              </div>
+              <a class="bs-link" href="https://www.beatstars.com/PLACEHOLDER" target="_blank" rel="noopener">
+                open on beatstars &#8599;
+              </a>
+            </article>
+
+            <article class="panel" id="panel-work" aria-label="the work">
+              <h2 class="chapel-title">the work</h2>
+              <ul class="work-list"></ul>
+              <a class="bs-link work-catalog" target="_blank" rel="noopener">the full catalog &#8599;</a>
+            </article>
+
+            <article class="panel" id="panel-about" aria-label="about">
+              <h2 class="chapel-title">about</h2>
+              <p class="work-bio"></p>
+              <nav class="work-socials" aria-label="social links"></nav>
+              <p class="contact">
+                custom work &mdash; <a href="mailto:beats@prodfish.com">beats@prodfish.com</a>
+              </p>
+            </article>
+
+          </div>
+        </div>
+
+        <nav class="panel-dots" aria-label="choose a panel"></nav>
       </div>
-      <a class="bs-link" href="https://www.beatstars.com/PLACEHOLDER" target="_blank" rel="noopener">
-        open on beatstars ↗
-      </a>
-      <nav class="socials" aria-label="social links">
-        <a href="#" aria-label="Instagram">instagram</a>
-        <a href="#" aria-label="YouTube">youtube</a>
-        <a href="#" aria-label="TikTok">tiktok</a>
-      </nav>
-      <p class="contact">
-        custom work — <a href="mailto:beats@prodfish.com">beats@prodfish.com</a>
-      </p>
+
       <footer class="chapel-footer">
-        © prodfish. recorded after dark.<br />
-        3d: <a href="https://sketchfab.com/3d-models/church-867a847b67364484bf44912e1af190af" target="_blank" rel="noopener">church — tiago lopes</a> (cc-by) · <a href="https://sketchfab.com/3d-models/crow-d5a9b0df4da3493688b63ce42c8a83e2" target="_blank" rel="noopener">crow — alexei ostapenko</a> (cc-by)
+        &copy; prodfish. recorded after dark.<br />
+        3d: <a href="https://sketchfab.com/3d-models/church-867a847b67364484bf44912e1af190af" target="_blank" rel="noopener">church &mdash; tiago lopes</a> (cc-by) &middot; <a href="https://sketchfab.com/3d-models/crow-d5a9b0df4da3493688b63ce42c8a83e2" target="_blank" rel="noopener">crow &mdash; alexei ostapenko</a> (cc-by)
       </footer>
     </section>
   </main>

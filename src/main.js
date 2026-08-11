@@ -9,6 +9,8 @@ import { CREDITS, BIO, CATALOG_URL, SOCIALS } from './content/portfolio.js';
 import { initScroll } from './scroll.js';
 import { buildTimeline } from './timeline.js';
 import { createPicker, pointerToNdc } from './picking.js';
+import { createPanels } from './panels.js';
+import { JOURNEY_VH } from './journey.js';
 import { ENGRAVED_STONE_INK, ENGRAVED_LIT } from './world/engraving.js';
 
 function webglAvailable() {
@@ -81,6 +83,11 @@ async function boot() {
   const app = initScene({ canvas: document.getElementById('scene'), state, tier, models });
   document.body.classList.add('ready');
 
+  // The document's height and the timeline's span must agree, or the
+  // journey either runs out early or never finishes. JOURNEY_VH is the one
+  // source of truth; the CSS value is only a sensible pre-boot default.
+  document.getElementById('scroll-track').style.height = `${JOURNEY_VH}vh`;
+
   initScroll();
   buildTimeline(state);
 
@@ -148,10 +155,9 @@ function bootFailed(err) {
   loading.style.opacity = '1';
 }
 
-// Fills the static section from the same content module the carved stone
-// and plaster use, so the two presentations can never drift apart. Runs
-// unconditionally -- the section is CSS-hidden unless a fallback class is
-// set, which keeps this to one code path.
+// Fills the credits and about panels from the content module. The carved
+// song stones along the approach read from the same source, so the two can
+// never drift apart.
 function fillStaticPortfolio() {
   const list = document.querySelector('.work-list');
   const bio = document.querySelector('.work-bio');
@@ -184,6 +190,12 @@ function fillStaticPortfolio() {
 }
 
 fillStaticPortfolio();
+
+// The panels are the site's only navigation, so they are wired up
+// unconditionally — including on the reduced-motion and no-WebGL paths,
+// which never boot the 3D scene but still need the catalog and the bio.
+const panelRoot = document.querySelector('.panels');
+if (panelRoot) createPanels(panelRoot);
 
 if (prefersReduced) document.body.classList.add('reduced');
 

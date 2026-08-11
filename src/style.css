@@ -106,12 +106,13 @@ body.ready #loading { opacity: 0; pointer-events: none; }
 
 #scroll-track {
   position: relative;
-  /* fix-round: 600vh -> 1000vh -- the timeline is percentage-based, so
-     every act's slice of scroll stretches proportionally with this value.
+  /* Kept in sync with JOURNEY_VH in src/journey.js, which boot() applies
+     over the top -- this is only the pre-boot default. If the two disagree
+     the journey either runs out before the beats or never finishes.
      600vh made the whole descent (and especially the door approach) feel
      rushed; 1000vh gives each act room to breathe without touching a
      single act boundary in choreography.js. */
-  height: 1000vh;
+  height: 1600vh;
   z-index: 4;
   /* fix-round: this element spans the FULL document height at z-index 4,
      above #scene's 0 -- with the default `auto`, its empty (transparent)
@@ -135,7 +136,7 @@ body.ready #loading { opacity: 0; pointer-events: none; }
   align-items: center;
   justify-content: center;
   gap: 2rem;
-  padding: 4rem 1.5rem;
+  padding: 2rem 1.5rem;
   /* fix-round: #chapel sits in normal document flow at the bottom of the
      #scroll-track (see height above), so it starts sliding into the fixed viewport
      purely from its own height vs. the track's total height -- independent
@@ -294,58 +295,97 @@ body.ready #loading { opacity: 0; pointer-events: none; }
 }
 
 
-#sign-controls button:focus-visible {
-  width: auto;
-  height: auto;
-  margin: 0;
-  padding: 0.6rem 1rem;
-  clip-path: none;
-  left: 50%;
-  bottom: 12vh;
-  transform: translateX(-50%);
-  z-index: 7;
-  background: rgba(8, 7, 6, 0.9);
-  border: 1px solid var(--blood);
-  color: var(--bone);
-  font-family: var(--mono);
-  font-size: 0.7rem;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-}
-
-.reduced 
-/* The credits, bio and social links live in the world as carved stone and
-   plaster, which assistive technology and crawlers cannot see. This is the
-   same content as real markup. Hidden while the 3D journey is running so it
-   never duplicates what the visitor is walking through; shown in full for
-   reduced-motion and no-WebGL visitors, who never get the journey. */
-#work { display: none; }
-.reduced #work, .no-webgl #work {
+/* ---------- the altar panels: beats / the work / about ---------- */
+/* The destination is also the hub. Real markup moved by a transform, so the
+   whole catalog and bio are in the page for keyboard, screen readers and
+   search — no hidden duplicate section needed. */
+.panels { position: relative; width: min(760px, 94vw); }
+.panel-viewport { overflow: hidden; }
+.panel-strip {
   display: flex;
-  position: relative;
+  transition: transform 0.55s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+.panel {
+  flex: 0 0 100%;
+  max-height: 74vh;
+  min-width: 100%;
+  display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 1.5rem;
-  padding: 5rem 1.5rem 2rem;
-  text-align: center;
+  gap: 1.4rem;
+  padding: 0 0.5rem;
 }
-.work-list { list-style: none; display: flex; flex-direction: column; gap: 1rem; }
+.panel[aria-hidden='true'] { visibility: hidden; }
+
+.panel-arrow {
+  position: absolute;
+  top: 42%;
+  z-index: 2;
+  background: rgba(8, 7, 6, 0.6);
+  border: 1px solid rgba(193, 23, 15, 0.4);
+  color: var(--bone);
+  font-family: var(--serif);
+  font-size: 1.6rem;
+  line-height: 1;
+  width: 2.4rem;
+  height: 2.4rem;
+  cursor: pointer;
+  transition: border-color 0.25s, color 0.25s, opacity 0.25s;
+}
+.panel-arrow:hover:not(:disabled) { border-color: var(--blood); color: #fff; }
+.panel-arrow:disabled { opacity: 0.2; cursor: default; }
+.panel-prev { left: -1.2rem; }
+.panel-next { right: -1.2rem; }
+
+.panel-dots { display: flex; gap: 1.6rem; justify-content: center; margin-top: 1.6rem; }
+.panel-dot {
+  background: none;
+  border: 0;
+  border-bottom: 1px solid transparent;
+  color: rgba(216, 211, 200, 0.35);
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  padding: 0 0 3px;
+  cursor: pointer;
+  transition: color 0.25s, border-color 0.25s;
+}
+.panel-dot[aria-current='true'] {
+  color: var(--bone);
+  border-bottom-color: var(--blood);
+}
+
+/* The catalog is expected to grow well past ten entries, so the list
+   scrolls inside a fixed-height panel rather than growing the panel until
+   its heading is pushed off the top of the screen. */
+.work-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  max-height: 46vh;
+  overflow-y: auto;
+  padding-right: 0.5rem;
+}
+.work-list::-webkit-scrollbar { width: 3px; }
+.work-list::-webkit-scrollbar-thumb { background: rgba(193, 23, 15, 0.5); }
 .work-list a {
   color: rgba(216, 211, 200, 0.85);
   text-decoration: none;
   font-family: var(--serif);
   font-style: italic;
-  font-size: 1.1rem;
+  font-size: 1.05rem;
 }
 .work-list a:hover { color: var(--bone); }
 .work-list .work-artist {
   display: block;
   font-family: var(--mono);
   font-style: normal;
-  font-size: 0.66rem;
+  font-size: 0.62rem;
   letter-spacing: 0.28em;
   text-transform: uppercase;
-  color: rgba(216, 211, 200, 0.5);
+  color: rgba(216, 211, 200, 0.45);
 }
 .work-bio {
   max-width: 34rem;
@@ -353,6 +393,7 @@ body.ready #loading { opacity: 0; pointer-events: none; }
   font-size: 1rem;
   line-height: 1.7;
   color: rgba(216, 211, 200, 0.8);
+  text-align: center;
 }
 .work-socials { display: flex; gap: 2.2rem; }
 .work-socials a {
@@ -364,3 +405,9 @@ body.ready #loading { opacity: 0; pointer-events: none; }
   text-decoration: none;
 }
 .work-socials a:hover { color: var(--bone); }
+
+@media (max-width: 640px) {
+  .panel-prev { left: -0.4rem; }
+  .panel-next { right: -0.4rem; }
+  .panel-dots { gap: 1rem; }
+}
