@@ -88,14 +88,30 @@ async function bootDebug() {
   gsap.ticker.add(() => app.render());
 }
 
+// Boot failures (bad model URL, WebGL init throwing mid-setup, etc.) were
+// previously fire-and-forget: the #loading overlay stays visible forever
+// with no signal anything went wrong. Surface it instead, keeping the
+// overlay up rather than letting the page look permanently stuck loading.
+function bootFailed(err) {
+  console.error('boot failed', err);
+  const loading = document.getElementById('loading');
+  if (!loading) return;
+  loading.textContent = 'something went wrong — refresh to retry';
+  // Inline styles win over the .reduced/.no-webgl CSS rules that otherwise
+  // hide #loading in those modes, so the message is visible regardless of
+  // which boot path failed.
+  loading.style.display = 'flex';
+  loading.style.opacity = '1';
+}
+
 if (prefersReduced) document.body.classList.add('reduced');
 
 if (!webglAvailable()) {
   document.body.classList.add('no-webgl');
 } else if (new URLSearchParams(location.search).has('debug')) {
-  bootDebug();
+  bootDebug().catch(bootFailed);
 } else if (prefersReduced) {
-  bootStatic();
+  bootStatic().catch(bootFailed);
 } else {
-  boot();
+  boot().catch(bootFailed);
 }

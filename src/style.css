@@ -221,6 +221,13 @@ body.ready #loading { opacity: 0; pointer-events: none; }
   text-transform: uppercase;
   color: rgba(216, 211, 200, 0.25);
 }
+.chapel-footer a {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: rgba(216, 211, 200, 0.3);
+  text-underline-offset: 2px;
+}
+.chapel-footer a:hover { color: rgba(216, 211, 200, 0.5); }
 
 /* ---------- reduced motion: static composed page ---------- */
 .reduced #blackout { opacity: 0; }

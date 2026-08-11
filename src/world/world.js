@@ -37,6 +37,34 @@ export const PROP_SPOTS = {
   ],
 };
 
+// Low-tier prop thinning: keep the ~`fraction` of `spots` sitting closest to
+// the camera path (by nearest-approach distance), dropping the rest. This is
+// deterministic (fixed distance metric, no randomness) and never mutates
+// PROP_SPOTS itself -- it only filters at placement time in buildWorld(), so
+// PROP_SPOTS stays exactly as the corridor-clearance/density tests expect.
+// Keeping the near-path spots (rather than, say, an arbitrary prefix of the
+// array) means the props hugging the road -- what's actually legible in
+// frame during the approach -- stay dressed, while the further-back "depth"
+// row thins out first.
+function nearestToPath(spots, fraction) {
+  const scored = spots.map((spot, index) => {
+    const [x, z] = spot;
+    let minD = Infinity;
+    for (let i = 0; i <= 60; i++) {
+      const p = positionAt(i / 60);
+      const d = Math.hypot(p.x - x, p.z - z);
+      if (d < minD) minD = d;
+    }
+    return { spot, index, minD };
+  });
+  scored.sort((a, b) => a.minD - b.minD);
+  const keep = Math.round(spots.length * fraction);
+  return scored
+    .slice(0, keep)
+    .sort((a, b) => a.index - b.index)
+    .map((s) => s.spot);
+}
+
 // Minimum horizontal distance from any spot to the sampled camera path.
 export function minPathClearance(spots) {
   let min = Infinity;
@@ -296,7 +324,7 @@ function normalize(gltfScene, targetHeight, centerMatch) {
   return root;
 }
 
-export function buildWorld({ scene, models, grassCount = 0 }) {
+export function buildWorld({ scene, models, grassCount = 0, tier = 'high' }) {
   // Sky dome: un-tonemapped so it stays a legible hazy navy instead of
   // crushing to black (see NIGHT_SKY comment above). Radius sits inside the
   // camera's far plane (130) and fog:false keeps it a flat, un-hazed backdrop
@@ -508,11 +536,16 @@ export function buildWorld({ scene, models, grassCount = 0 }) {
   const graveB = models.gravestoneB?.scene ?? silhouette('graveb');
   const tree = models.treeA?.scene ?? silhouette('tree');
   const treeB = models.treeB?.scene ?? silhouette('tree');
-  const half = Math.ceil(PROP_SPOTS.graves.length / 2);
-  place(scene, normalizeProp(grave, 1.1), PROP_SPOTS.graves.slice(0, half));
-  place(scene, normalizeProp(graveB, 1.3), PROP_SPOTS.graves.slice(half));
-  place(scene, normalizeProp(tree, 6), PROP_SPOTS.trees.filter((_, i) => i % 2 === 0));
-  place(scene, normalizeProp(treeB, 7), PROP_SPOTS.trees.filter((_, i) => i % 2 === 1));
+  // Low tier (likely mobile): thin the heaviest set dressing to ~60% of
+  // spots, keeping the ones nearest the path so the visible corridor still
+  // reads as dressed. High tier keeps every PROP_SPOTS entry unchanged.
+  const graveSpots = tier === 'low' ? nearestToPath(PROP_SPOTS.graves, 0.6) : PROP_SPOTS.graves;
+  const treeSpots = tier === 'low' ? nearestToPath(PROP_SPOTS.trees, 0.6) : PROP_SPOTS.trees;
+  const half = Math.ceil(graveSpots.length / 2);
+  place(scene, normalizeProp(grave, 1.1), graveSpots.slice(0, half));
+  place(scene, normalizeProp(graveB, 1.3), graveSpots.slice(half));
+  place(scene, normalizeProp(tree, 6), treeSpots.filter((_, i) => i % 2 === 0));
+  place(scene, normalizeProp(treeB, 7), treeSpots.filter((_, i) => i % 2 === 1));
 
   // Altar anchor: where the cross + altar light mount, on the chapel's own
   // interior back wall (just in front of it, facing the aisle) rather than a

@@ -28,7 +28,7 @@ export function initScene({ canvas, state, tier, models }) {
 
   const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 130);
 
-  const world = buildWorld({ scene, models, grassCount: settings.grass });
+  const world = buildWorld({ scene, models, grassCount: settings.grass, tier });
   const crows = createCrows({
     scene, gltf: models.crow, roofline: world.roofline, count: settings.crows,
   });
@@ -87,11 +87,37 @@ export function initScene({ canvas, state, tier, models }) {
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
     post.composer.setSize(window.innerWidth, window.innerHeight);
+    // renderer.setSize() clears the framebuffer. In normal mode the ticker
+    // repaints on the very next frame anyway (harmless extra render here),
+    // but reduced-motion's bootStatic() only ever renders a handful of
+    // frames at boot then stops the ticker entirely -- without this, any
+    // resize (rotate, devtools, browser chrome) left that canvas blank for
+    // the rest of the session. One frame after resize keeps both cases
+    // correct.
+    render();
+  });
+
+  // Set once on WebGL context loss (e.g. GPU reset, tab backgrounding on
+  // constrained devices). Guards render() so the ticker's ongoing calls
+  // become harmless no-ops instead of touching a dead GL context, and swaps
+  // the page over to the CSS-only no-webgl fallback the spec promises.
+  let dead = false;
+  renderer.domElement.addEventListener('webglcontextlost', (event) => {
+    // Prevent the browser default (which would leave the context perma-lost
+    // with no recovery path) -- we're not attempting to restore it, just
+    // handing off to the static fallback, so preventDefault() here just
+    // suppresses the default "unhandled" browser behavior.
+    event.preventDefault();
+    dead = true;
+    document.body.classList.add('no-webgl');
+    document.body.classList.remove('reduced');
+    renderer.dispose();
   });
 
   const clock = new THREE.Clock();
   const look = new THREE.Vector3();
   function render() {
+    if (dead) return;
     const t = clock.getElapsedTime();
 
     // Camera rides the path; ambient sway layered on top so the scene

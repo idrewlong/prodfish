@@ -8,3 +8,6 @@ assets/source/
 .agents/skills/
 .claude/skills/
 skills-lock.json
+
+# asset pipeline scratch output (scripts/build-assets.mjs)
+assets/.tmp-simplified/
