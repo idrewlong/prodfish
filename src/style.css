@@ -66,6 +66,45 @@ body {
 body.ready #loading { opacity: 0; pointer-events: none; }
 .reduced #loading, .no-webgl #loading { display: none; }
 
+#labels {
+  position: fixed;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  overflow: hidden;
+}
+.label {
+  pointer-events: auto;
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  text-align: center;
+  color: var(--bone);
+  text-shadow: 0 0 12px rgba(0, 0, 0, 0.95), 0 0 30px rgba(0, 0, 0, 0.8);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: color 0.25s;
+}
+.label .label-track {
+  display: block;
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 1.05rem;
+  letter-spacing: 0.08em;
+  text-transform: none;
+  color: rgba(216, 211, 200, 0.85);
+}
+.label:hover,
+.label:focus-visible {
+  color: #fff;
+}
+.label:focus-visible {
+  outline: 1px solid var(--blood);
+  outline-offset: 6px;
+}
+.reduced #labels, .no-webgl #labels { display: none; }
+
 #hero {
   position: fixed;
   inset: 0;
