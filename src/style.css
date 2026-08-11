@@ -105,7 +105,12 @@ body.ready #loading { opacity: 0; pointer-events: none; }
 
 #scroll-track {
   position: relative;
-  height: 600vh;
+  /* fix-round: 600vh -> 1000vh -- the timeline is percentage-based, so
+     every act's slice of scroll stretches proportionally with this value.
+     600vh made the whole descent (and especially the door approach) feel
+     rushed; 1000vh gives each act room to breathe without touching a
+     single act boundary in choreography.js. */
+  height: 1000vh;
   z-index: 4;
 }
 
@@ -122,7 +127,7 @@ body.ready #loading { opacity: 0; pointer-events: none; }
   gap: 2rem;
   padding: 4rem 1.5rem;
   /* fix-round: #chapel sits in normal document flow at the bottom of the
-     600vh #scroll-track, so it starts sliding into the fixed viewport
+     #scroll-track (see height above), so it starts sliding into the fixed viewport
      purely from its own height vs. the track's total height -- independent
      of the master timeline's act boundaries. That mismatch (this block was
      already fully visible at ~76% scroll, well before the beats act even

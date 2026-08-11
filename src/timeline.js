@@ -28,6 +28,15 @@ export function buildTimeline(state) {
   // camera reaches the doorway exactly at the threshold act, whatever the
   // curve's proportions are.
   const DOOR_FRONT_T = T_DOOR - 0.07; // a few meters shy of the door
+  // fix-round: the approach act used to tween all the way to DOOR_FRONT_T
+  // itself, which meant its sine.inOut deceleration had to fully complete
+  // right at the door -- combined with the threshold act's old power1.in
+  // (accelerating) pathT ease picking up immediately after, the camera
+  // read as slow-then-sudden-fast right at the doorway, the exact "speeds
+  // up and enters too fast" complaint. Stopping a small margin short hands
+  // the final approach to the door over to the threshold act's own slow,
+  // even crawl instead.
+  const APPROACH_END_T = DOOR_FRONT_T - 0.02;
   const DOOR_IN_T = Math.min(T_DOOR + 0.05, 0.9); // just inside the nave
 
   // ACT 1 — ARRIVAL: world emerges out of black; barely any motion yet.
@@ -49,10 +58,11 @@ export function buildTimeline(state) {
   // 40% scroll shows the church small and distant, 45% shows the camera
   // point-blank at the door -- a whiplash jump, not a walk). A single gentle
   // `sine.inOut` tween across the whole act reads as one steady, unhurried
-  // approach with no ramp: slow-in, even through the middle, slow-out right
-  // at the door, and it still lands exactly on DOOR_FRONT_T at approachEnd
-  // so every downstream act boundary is untouched.
-  tl.to(state, { pathT: DOOR_FRONT_T, duration: approachEnd - approachStart, ease: 'sine.inOut' }, approachStart)
+  // approach with no ramp: slow-in, even through the middle, slow-out
+  // toward the door. It now lands on APPROACH_END_T (a hair short of
+  // DOOR_FRONT_T) at approachEnd, leaving the last stretch to the
+  // threshold act's linear crawl -- see APPROACH_END_T comment above.
+  tl.to(state, { pathT: APPROACH_END_T, duration: approachEnd - approachStart, ease: 'sine.inOut' }, approachStart)
     .to(state, { fog: 0.04, duration: approachEnd - approachStart }, approachStart)
     .to(state, { swayAmp: 0.5, duration: approachEnd - approachStart }, approachStart)
     .to(state, { crowT: 1, duration: 0.14 }, 0.28);
@@ -66,7 +76,12 @@ export function buildTimeline(state) {
     .to(state, { crossGlow: 1, duration: thresholdEnd - thresholdStart, ease: 'power1.in' }, thresholdStart)
     .to('#glow', { opacity: 0.85, duration: 0.08 }, thresholdStart + 0.02)
     .to('#glow', { opacity: 0, duration: 0.06 }, thresholdEnd - 0.06)
-    .to(state, { pathT: DOOR_IN_T, duration: thresholdEnd - thresholdStart, ease: 'power1.in' }, thresholdStart)
+    // fix-round: was `power1.in` -- an ACCELERATING ease, the literal
+    // opposite of what a doorway crossing should feel like, and the main
+    // cause of the "speeds up and enters too fast" complaint. `none`
+    // (linear) gives a slow, even crawl through the doorway at a constant
+    // pace instead of ramping up right as the camera passes the threshold.
+    .to(state, { pathT: DOOR_IN_T, duration: thresholdEnd - thresholdStart, ease: 'none' }, thresholdStart)
     .to(state, { fireflies: 0, duration: 0.08 }, thresholdStart + 0.04)
     .to(state, { fog: 0.028, duration: 0.08 }, thresholdEnd - 0.08);
 
@@ -78,9 +93,8 @@ export function buildTimeline(state) {
 
   // ACT 5 — BEATS: settle before the altar; residual drift only.
   // fix-round: #chapel (the BeatStars embed DOM section) is an in-flow block
-  // at the bottom of the 600vh scroll-track, so it was already sliding into
-  // the viewport around 76% scroll purely from its own height vs. the
-  // track's total height -- well before this act even starts, while the
+  // at the bottom of the scroll-track, so it was already sliding into
+  // the viewport well before this act even starts, while the
   // camera was still mid-drift down the aisle in ACT 4. That mismatch read
   // as a jarring scene change. #chapel now starts at opacity 0 (style.css)
   // and fades in here, driven by the same scroll fraction as the camera
