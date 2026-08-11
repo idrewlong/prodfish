@@ -9,7 +9,7 @@ import { createRouteState } from './world/route.js';
 import { CREDITS, BIO, CATALOG_URL } from './content/portfolio.js';
 import { initScroll } from './scroll.js';
 import { buildTimeline } from './timeline.js';
-import { trackHeightVh } from './journey.js';
+import { trackHeightVh, journeyDistancePx } from './journey.js';
 
 function webglAvailable() {
   try {
@@ -146,7 +146,12 @@ async function boot() {
   ScrollTrigger.create({
     trigger: '#scroll-track',
     start: 'top top',
-    end: 'bottom bottom',
+    // Must span the same fixed journey distance as the master timeline.
+    // With `bottom bottom` this measured the parked document instead, so
+    // `self.progress` ran 1/T_FORK_SCROLL too fast and locked the route
+    // choice at ~9% of the journey -- killing the signpost before the
+    // camera ever reached it.
+    end: () => `+=${journeyDistancePx(state.route, window.innerHeight)}`,
     onUpdate: (self) => routeState.syncLock(self.progress),
   });
 

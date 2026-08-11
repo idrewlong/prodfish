@@ -38,4 +38,14 @@ describe('journey sizing', () => {
     expect(journeyDistancePx('direct', 800)).toBe(journeyDistancePx('direct', 800));
     expect(journeyDistancePx('direct', 1000)).toBeGreaterThan(journeyDistancePx('direct', 800));
   });
+
+  it('parked scroll maps to true journey progress, not document progress', () => {
+    // The lock fraction must be read against the FULL journey. Measuring
+    // against the parked document instead ran progress 1/T_FORK_SCROLL too
+    // fast and locked the route choice long before the fork.
+    const innerHeight = 800;
+    const parkedScrollablePx = (trackHeightVh(null, false) - 100) / 100 * innerHeight;
+    const progressAtBottom = parkedScrollablePx / journeyDistancePx('direct', innerHeight);
+    expect(progressAtBottom).toBeCloseTo(T_FORK_SCROLL, 5);
+  });
 });
