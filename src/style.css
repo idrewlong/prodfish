@@ -66,7 +66,6 @@ body {
 body.ready #loading { opacity: 0; pointer-events: none; }
 .reduced #loading, .no-webgl #loading { display: none; }
 
-.reduced #labels, .no-webgl 
 #hero {
   position: fixed;
   inset: 0;
