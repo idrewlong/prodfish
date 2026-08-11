@@ -26,61 +26,16 @@ const directCurve = new THREE.CatmullRomCurve3(
   0.5,
 );
 
-// The fork is SAMPLED from the direct curve rather than hand-written, so the
-// two routes provably meet there. Hardcoding a guess would leave a gap.
-const T_FORK_DIRECT = 0.389;
-export const FORK = directCurve.getPointAt(T_FORK_DIRECT);
+// A sampled point partway along the road. It was the fork when there were
+// two roads; it survives only as a convenient landmark for placing things
+// mid-approach.
+const T_MIDWAY = 0.389;
+export const FORK = directCurve.getPointAt(T_MIDWAY);
 
-// The scenic road: out of the graveyard, right and away into low wet ground,
-// wandering wide of the church before it ever gives up its forward progress,
-// along a row of markers, then back to the church door. Roughly three times
-// the direct road, so the church drops out of sight and arriving at the row
-// feels like reaching somewhere else. It keeps the two properties the fork
-// depends on: it passes through FORK and rejoins at DOOR_FRONT.
-//
-// Note: z decreases monotonically along this route, same as the direct
-// road — every work-only control point stays north of DOOR_FRONT's z. A
-// horseshoe that dipped south past the church and swung back would read as
-// the camera reversing mid-scroll (the existing "z never doubles back"
-// test catches exactly that), so the extra distance is built laterally —
-// wide swings in x — rather than by looping past the building.
-// The row runs high (z 21 -> 16) while the return leg hugs z 8 and below.
-// That separation is deliberate and load-bearing: the stones stand a few
-// metres off the row on BOTH sides, and an earlier layout that let the two
-// legs converge pushed the inner stones onto the return road, leaving 0.6m
-// of clearance where 1.4m is required.
-export const ROW_START = new THREE.Vector3(22, 1.75, 21);
-export const ROW_END = new THREE.Vector3(62, 1.68, 16);
-
-const workCurve = new THREE.CatmullRomCurve3(
-  [
-    LANDMARKS.START,
-    LANDMARKS.FIELD_MID,
-    FORK,
-    new THREE.Vector3(10, 1.78, 23),   // turn off the church road
-    ROW_START,                         // the row begins
-    new THREE.Vector3(36, 1.73, 19),   // out along the markers
-    new THREE.Vector3(50, 1.70, 17.5), // deeper into the low ground
-    ROW_END,                           // the row ends
-    new THREE.Vector3(54, 1.62, 8),    // the road bends back
-    new THREE.Vector3(36, 1.59, 5.6),
-    new THREE.Vector3(16, 1.57, 4.2),  // rejoining the church road
-    LANDMARKS.DOOR_FRONT, LANDMARKS.DOOR, LANDMARKS.AISLE_IN,
-    LANDMARKS.AISLE_MID, LANDMARKS.ALTAR_STOP,
-  ],
-  false,
-  'centripetal',
-  0.5,
-);
-
-const CURVES = { direct: directCurve, work: workCurve };
-export const ROUTES = ['direct', 'work'];
-
-// Scroll fraction the fork is pinned to on BOTH routes. Route switching is
-// only continuous because of this: at the moment of the switch the camera is
-// at FORK on either curve AND at the same scroll fraction, so restoring the
-// scroll position by fraction lands in exactly the same place.
-export const T_FORK_SCROLL = 0.30;
+// One road. `route` parameters remain on the exported functions so callers
+// that pass one keep working, but every value resolves to this curve.
+const CURVES = { direct: directCurve };
+export const ROUTES = ['direct'];
 
 function curveFor(route) {
   return CURVES[route] ?? directCurve;
@@ -128,12 +83,6 @@ export function tNearest(point, route = 'direct') {
     if (d < bestD) { bestD = d; best = t; }
   }
   return best;
-}
-
-// Arc-length span of the monument row, so the timeline can give that stretch
-// its own deliberately slow scroll budget.
-export function tRow(route = 'work') {
-  return { start: tNearest(ROW_START, route), end: tNearest(ROW_END, route) };
 }
 
 export const T_GATE = tNearest(LANDMARKS.GATE);

@@ -29,7 +29,6 @@ describe('createState', () => {
     expect(s.fireflies).toBe(0);
     expect(s.swayAmp).toBe(1);
     expect(s.fog).toBeGreaterThan(0);
-    expect(s.route).toBe('direct');
   });
   it('returns independent objects', () => {
     const a = createState();

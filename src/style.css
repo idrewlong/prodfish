@@ -66,52 +66,7 @@ body {
 body.ready #loading { opacity: 0; pointer-events: none; }
 .reduced #loading, .no-webgl #loading { display: none; }
 
-#labels {
-  position: fixed;
-  inset: 0;
-  /* Must stay above #scroll-track (z-index: 4, position: relative, 1000vh
-     tall, no pointer-events: none) -- at any lower z-index #scroll-track's
-     stacking context sits on top of this layer for the entire scroll and
-     silently eats every click meant for a signpost arm or credit link. Also
-     above #loading's 5 is harmless: labels stay visibility: hidden until
-     update() first reveals one, which is after boot finishes. Do not lower
-     this back toward 3 without re-checking the click path. */
-  z-index: 6;
-  pointer-events: none;
-  overflow: hidden;
-}
-.label {
-  pointer-events: auto;
-  font-family: var(--mono);
-  font-size: 0.72rem;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  text-align: center;
-  color: var(--bone);
-  text-shadow: 0 0 12px rgba(0, 0, 0, 0.95), 0 0 30px rgba(0, 0, 0, 0.8);
-  text-decoration: none;
-  white-space: nowrap;
-  transition: color 0.25s;
-}
-.label .label-track {
-  display: block;
-  font-family: var(--serif);
-  font-style: italic;
-  font-size: 1.05rem;
-  letter-spacing: 0.08em;
-  text-transform: none;
-  color: rgba(216, 211, 200, 0.85);
-}
-.label:hover,
-.label:focus-visible {
-  color: #fff;
-}
-.label:focus-visible {
-  outline: 1px solid var(--blood);
-  outline-offset: 6px;
-}
-.reduced #labels, .no-webgl #labels { display: none; }
-
+.reduced #labels, .no-webgl 
 #hero {
   position: fixed;
   inset: 0;
@@ -338,49 +293,7 @@ body.ready #loading { opacity: 0; pointer-events: none; }
   background: radial-gradient(ellipse at 50% 30%, #2b0402, #0d0100 75%);
 }
 
-.label-crypt {
-  width: min(30rem, 74vw);
-  white-space: normal;
-  text-align: center;
-  display: flex;
-  flex-direction: column;
-  gap: 0.9rem;
-}
-.label-crypt p {
-  font-family: var(--serif);
-  font-size: 1rem;
-  line-height: 1.6;
-  letter-spacing: 0.02em;
-  text-transform: none;
-  color: rgba(216, 211, 200, 0.9);
-}
-.label-crypt a {
-  color: rgba(216, 211, 200, 0.7);
-  font-size: 0.68rem;
-  letter-spacing: 0.25em;
-  text-transform: uppercase;
-  text-decoration: none;
-  border-bottom: 1px solid rgba(193, 23, 15, 0.5);
-  padding-bottom: 2px;
-  align-self: center;
-}
-.label-crypt a:hover { color: var(--bone); }
 
-/* The words are carved into the sign in the 3D scene, which assistive
-   technology cannot see. These are the same two choices as real, focusable
-   controls: clipped out of sight rather than display:none, so they stay in
-   the tab order and are announced normally. */
-#sign-controls button {
-  position: fixed;
-  width: 1px;
-  height: 1px;
-  margin: -1px;
-  padding: 0;
-  border: 0;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-}
 #sign-controls button:focus-visible {
   width: auto;
   height: auto;
@@ -400,26 +313,7 @@ body.ready #loading { opacity: 0; pointer-events: none; }
   text-transform: uppercase;
 }
 
-#choose-hint {
-  position: fixed;
-  left: 50%;
-  bottom: 14vh;
-  transform: translateX(-50%);
-  z-index: 6;
-  margin: 0;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 1.2s ease;
-  font-family: var(--mono);
-  font-size: 0.66rem;
-  letter-spacing: 0.4em;
-  text-transform: uppercase;
-  color: rgba(216, 211, 200, 0.55);
-  text-shadow: 0 0 18px rgba(0, 0, 0, 0.9);
-}
-#choose-hint.show { opacity: 1; }
-.reduced #choose-hint, .no-webgl #choose-hint { display: none; }
-
+.reduced 
 /* The credits, bio and social links live in the world as carved stone and
    plaster, which assistive technology and crawlers cannot see. This is the
    same content as real markup. Hidden while the 3D journey is running so it
