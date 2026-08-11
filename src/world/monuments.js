@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { positionAt } from './path.js';
+import { positionAt, targetAt, tNearest, FORK } from './path.js';
 import { makeEngravedTexture, ENGRAVED_INK } from './engraving.js';
 
 // Ten markers flanking the scenic route between ROW_IN (z 18) and CRYPT
@@ -39,13 +39,17 @@ export function minDistanceToRouteFor(x, z, route) {
   return minDistanceToRoute(x, z, route);
 }
 
-// Position of the signpost itself, kept clear of both routes. Offsetting to
-// the +x side of the fork looks natural on paper but sits inside the work
-// route's turn (measured 0.72m clearance) -- the camera would clip it. -x is
-// the clear side: measured clearance here is 2.67m from the work route and
-// 3.00m from the direct route, both comfortably outside the 1.4m corridor
-// the monument stones are held to.
-export const SIGNPOST_SPOT = [-2.70, 25.13];
+// Measured against the parked camera, not eyeballed. The journey stops at
+// the fork (camera ~(0.09, 1.80, 24.03), travelling toward lower z), so a
+// sign standing level with or behind that point is out of frame exactly
+// when it needs to be read. This spot sits ~6m ahead and to the left:
+// 16.4 degrees off the camera's centre line, with 2.12m clearance from the
+// direct road and 5.91m from the scenic one.
+export const SIGNPOST_SPOT = [-3.64, 19.19];
+
+// Turned to face the parked camera, so the boards present their faces
+// rather than their edges at the moment of the choice.
+export const SIGNPOST_ROT_Y = 0.66;
 
 // Smallest horizontal distance from any monument to the scenic route — the
 // camera must not clip a headstone as it walks the row.
@@ -57,6 +61,23 @@ export function minWorkPathClearance() {
 // detour worth taking rather than something you can read from the road.
 export function minDirectPathDistance() {
   return Math.min(...MONUMENT_SPOTS.map(([x, z]) => minDistanceToRoute(x, z, 'direct')));
+}
+
+// Angle between the parked camera's forward direction and the direction to
+// the sign. The test above uses this to guarantee the sign is on screen.
+export function signViewAngleDeg() {
+  const tFork = tNearest(FORK, 'direct');
+  const cam = positionAt(tFork, 'direct');
+  const look = targetAt(tFork, 'direct');
+  const fx = look.x - cam.x;
+  const fz = look.z - cam.z;
+  const fLen = Math.hypot(fx, fz);
+  const [sx, sz] = SIGNPOST_SPOT;
+  const vx = sx - cam.x;
+  const vz = sz - cam.z;
+  const vLen = Math.hypot(vx, vz);
+  const cos = (fx * vx + fz * vz) / (fLen * vLen);
+  return (Math.acos(Math.min(1, Math.max(-1, cos))) * 180) / Math.PI;
 }
 
 // Which side of the scenic route a point falls on: positive one way,
@@ -156,7 +177,7 @@ function buildSignpost(scene) {
   // stones are held to.
   const [SIGN_X, SIGN_Z] = SIGNPOST_SPOT;
   group.position.set(SIGN_X, 0, SIGN_Z);
-  group.rotation.y = 0.38;
+  group.rotation.y = SIGNPOST_ROT_Y;
   scene.add(group);
 
   const anchor = new THREE.Vector3(SIGN_X, 2.55, SIGN_Z);

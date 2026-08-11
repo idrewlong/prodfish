@@ -33,3 +33,22 @@ describe('MONUMENT_SPOTS', () => {
     expect(minDistanceToRouteFor(x, z, 'direct')).toBeGreaterThan(1.4);
   });
 });
+
+import { SIGNPOST_ROT_Y, signViewAngleDeg } from '../src/world/monuments.js';
+
+describe('signpost framing', () => {
+  it('sits in front of the camera when the journey parks at the fork', () => {
+    // Guards the bug this task fixes: a sign behind the camera at the moment
+    // of the choice. Anything past ~25 degrees drifts to the frame edge.
+    expect(signViewAngleDeg()).toBeLessThan(25);
+  });
+  it('still clears both roads', () => {
+    const [x, z] = SIGNPOST_SPOT;
+    expect(minDistanceToRouteFor(x, z, 'work')).toBeGreaterThan(1.4);
+    expect(minDistanceToRouteFor(x, z, 'direct')).toBeGreaterThan(1.4);
+  });
+  it('is turned to face the parked camera rather than down the road', () => {
+    expect(SIGNPOST_ROT_Y).toBeGreaterThan(0.4);
+    expect(SIGNPOST_ROT_Y).toBeLessThan(0.9);
+  });
+});
