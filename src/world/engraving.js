@@ -13,6 +13,13 @@ import * as THREE from 'three';
 export const ENGRAVED_INK = 0x6b5a44; // cut into the shadowed grain, weathered and legible
 export const ENGRAVED_LIT = 0xe8c98a; // catching a little lantern light
 
+// The song titles are cut into pale granite, not the signpost's dark wood,
+// so they want the opposite treatment: near-black, which reads as a deep
+// shadowed cut against a light surface. The signpost's tan ink would vanish
+// on stone. Read from ~3m away at walking pace, so contrast matters more
+// than subtlety.
+export const ENGRAVED_STONE_INK = 0x1a1512;
+
 // Average glyph width for this face is close enough to 0.5em for fitting a
 // short sign legend; measuring per-glyph would need a canvas, and this runs
 // in tests where there isn't one.

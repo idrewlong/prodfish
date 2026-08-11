@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   PROP_SPOTS, minPathClearance, roadEndT, roadSampleCount,
+  SWAMP_CENTRE, SWAMP_RADIUS, swampReedSpots, swampTreeSpots,
 } from '../src/world/world.js';
 import { positionAt } from '../src/world/path.js';
 
@@ -34,5 +35,28 @@ describe('dirt roads', () => {
   });
   it('samples the longer road more finely so its curves do not facet', () => {
     expect(roadSampleCount('work')).toBeGreaterThan(roadSampleCount('direct'));
+  });
+});
+
+describe('the swamp', () => {
+  it('sits around the monument row, not around the church', () => {
+    // The two places must read as different countries: the swamp dressing
+    // belongs to the scenic road, and the church approach must stay dry.
+    expect(Math.hypot(SWAMP_CENTRE[0], SWAMP_CENTRE[1])).toBeGreaterThan(SWAMP_RADIUS);
+  });
+  it('places reeds deterministically', () => {
+    expect(swampReedSpots(40)).toEqual(swampReedSpots(40));
+  });
+  it('keeps reeds and trees out of the camera corridor', () => {
+    const clearance = (x, z) => {
+      let min = Infinity;
+      for (let i = 0; i <= 200; i++) {
+        const p = positionAt(i / 200, 'work');
+        min = Math.min(min, Math.hypot(p.x - x, p.z - z));
+      }
+      return min;
+    };
+    for (const [x, z] of swampReedSpots(80)) expect(clearance(x, z)).toBeGreaterThan(1.0);
+    for (const [x, z] of swampTreeSpots()) expect(clearance(x, z)).toBeGreaterThan(2.0);
   });
 });

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { positionAt, targetAt, tNearest, FORK } from './path.js';
-import { makeEngravedTexture, ENGRAVED_INK } from './engraving.js';
+import { makeEngravedTexture, ENGRAVED_INK, ENGRAVED_STONE_INK } from './engraving.js';
 import { CREDITS } from '../content/portfolio.js';
 
 // Ten markers flanking the monument row on the long swamp road, alternating
@@ -248,19 +248,24 @@ export function buildMonuments({ scene, stonesGltf, creditCount }) {
       // hanging in the air beside it.
       const box = new THREE.Box3().setFromObject(stone);
       const size = box.getSize(new THREE.Vector3());
-      const plateW = Math.max(0.7, size.x * 0.92);
+      // Wider than the stone: the words are what the visitor is here to
+      // read, and at 3m off the road a stone-width plate was an
+      // illegible smudge in every screenshot.
+      const plateW = Math.max(1.5, size.x * 1.5);
       const plate = new THREE.Mesh(
-        new THREE.PlaneGeometry(plateW, plateW * 0.28),
+        new THREE.PlaneGeometry(plateW, plateW * 0.3),
         new THREE.MeshBasicMaterial({
-          map: makeEngravedTexture(credit.track, { widthPx: 640, heightPx: 180, basePx: 86 }),
+          map: makeEngravedTexture(credit.track, { widthPx: 768, heightPx: 200, basePx: 104 }),
           transparent: true,
-          color: ENGRAVED_INK,
+          // Lighter than the signpost's ink: these are cut into pale
+          // granite, not dark wood, and must carry at road distance.
+          color: ENGRAVED_STONE_INK,
           depthWrite: false,
         }),
       );
       // On the face, above the middle, standing just proud of the surface so
       // it never z-fights with the stone behind it.
-      plate.position.set(0, size.y * 0.62, size.z / 2 + 0.04);
+      plate.position.set(0, size.y * 0.66, size.z / 2 + 0.05);
       stone.add(plate);
       stone.userData.href = credit.url;
       stone.userData.label = `${credit.artist} — ${credit.track}`;

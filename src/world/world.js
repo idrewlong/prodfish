@@ -290,6 +290,103 @@ function buildGrass(scene, count) {
   scene.add(mesh);
 }
 
+
+// ---------------------------------------------------------------- swamp ---
+// Low wet country around the monument row on the scenic road. Deliberately
+// far from the church so the two places read as different countries. This
+// reuses the graveyard's own grass geometry and placement helpers with
+// swampier parameters rather than introducing a second vegetation system.
+export const SWAMP_CENTRE = [42, 18];
+export const SWAMP_RADIUS = 30;
+
+// Deterministic, and held clear of the camera corridor — the clearance test
+// is only meaningful against fixed positions.
+export function swampReedSpots(count) {
+  const rand = makeLcg(0x5eed1e55);
+  const samples = [];
+  for (let i = 0; i <= 120; i++) samples.push(positionAt(i / 120, 'work'));
+  const spots = [];
+  let guard = 0;
+  while (spots.length < count && guard < count * 40) {
+    guard += 1;
+    const a = rand() * Math.PI * 2;
+    const r = Math.sqrt(rand()) * SWAMP_RADIUS;
+    const x = SWAMP_CENTRE[0] + Math.cos(a) * r;
+    const z = SWAMP_CENTRE[1] + Math.sin(a) * r;
+    let min = Infinity;
+    for (const p of samples) {
+      const d = Math.hypot(p.x - x, p.z - z);
+      if (d < min) min = d;
+    }
+    if (min > 1.3) spots.push([+x.toFixed(2), +z.toFixed(2)]);
+  }
+  return spots;
+}
+
+// Dead trees standing back from the row, deterministic and clear of the road.
+export function swampTreeSpots() {
+  // Measured clearances from the scenic road, in order: 9.2, 10.2, 8.2, 7.3,
+  // 5.7, 6.4, 4.6m. Two earlier spots sat on the road's RETURN leg (which
+  // runs z 8 -> 4, well south of the row itself) at 2.4m and 1.35m — close
+  // enough for the camera to drive through a trunk on the way home.
+  return [
+    [30.5, 29.0, 0.4, 1.15],
+    [46.0, 28.2, 1.9, 1.0],
+    [61.5, 25.0, 2.6, 1.2],
+    [24.0, 12.0, 0.9, 1.05],
+    [39.0, 11.5, 2.2, 1.1],
+    [68.0, 18.0, 1.3, 0.95],
+    [20.0, 26.0, 0.2, 1.1],
+  ];
+}
+
+function buildSwamp(scene, models, tier) {
+  // Still black water just below the ground plane, so the shoreline is the
+  // ground's own edge rather than a modelled bank.
+  const water = new THREE.Mesh(
+    new THREE.CircleGeometry(SWAMP_RADIUS, 56),
+    new THREE.MeshStandardMaterial({
+      color: '#0a1110', roughness: 0.18, metalness: 0.55,
+    }),
+  );
+  water.rotation.x = -Math.PI / 2;
+  water.position.set(SWAMP_CENTRE[0], -0.05, SWAMP_CENTRE[1]);
+  water.name = 'swampWater';
+  scene.add(water);
+
+  // Reeds: the graveyard's grass blade, taller and colder, standing in and
+  // around the water.
+  const count = tier === 'low' ? 260 : 700;
+  const mesh = new THREE.InstancedMesh(
+    buildGrassBladeGeometry(),
+    new THREE.MeshBasicMaterial({
+      map: makeGrassTexture(),
+      color: '#5d6a4a',
+      transparent: true,
+      alphaTest: 0.35,
+      side: THREE.DoubleSide,
+    }),
+    count,
+  );
+  mesh.name = 'swampReeds';
+  const dummy = new THREE.Object3D();
+  const spots = swampReedSpots(count);
+  spots.forEach(([x, z], i) => {
+    dummy.position.set(x, -0.03, z);
+    dummy.rotation.set(0, (i * 2.399) % (Math.PI * 2), 0);
+    dummy.scale.set(1, 1.5 + ((i * 37) % 70) / 100, 1);
+    dummy.updateMatrix();
+    mesh.setMatrixAt(i, dummy.matrix);
+  });
+  mesh.count = spots.length;
+  mesh.instanceMatrix.needsUpdate = true;
+  scene.add(mesh);
+
+  // Dead trees, reusing whichever tree model loaded.
+  const treeSrc = models.treeA?.scene ?? models.treeB?.scene ?? silhouette('tree');
+  place(scene, normalizeProp(treeSrc.clone(true), 7.5), swampTreeSpots());
+}
+
 function place(scene, template, spots) {
   for (const [x, z, rotY, s] of spots) {
     const obj = template.clone(true);
@@ -374,6 +471,7 @@ export function buildWorld({ scene, models, grassCount = 0, tier = 'high' }) {
   buildRoad(scene, 'direct');
   buildRoad(scene, 'work');
   buildGrass(scene, grassCount);
+  buildSwamp(scene, models, tier);
 
   // Moonlight from behind the chapel + a hemisphere fill so silhouettes read
   // in the fog without flattening the southern-gothic near-dark mood.
