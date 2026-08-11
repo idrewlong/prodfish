@@ -63,6 +63,18 @@ async function simplifyToBudget(input, output, budget) {
   const io = new NodeIO().registerExtensions(ALL_EXTENSIONS);
   const doc = await io.read(input);
 
+  // The budget is file-level, not per-primitive: multi-mesh files like
+  // grave-stones split it across many small primitives, each of which may
+  // already be individually under `budget`. Sum triangles across every
+  // primitive first. If the file is already within budget, skip
+  // simplification entirely (nothing to do, and calling simplifySloppy with
+  // target_index_count >= indices.length would violate its
+  // target_index_count <= indices.length assertion). If it's over, derive a
+  // single shrink ratio from the file-level overshoot and apply it
+  // uniformly to every primitive, so the whole file lands under budget
+  // while each mesh keeps its relative density.
+  const primitives = [];
+  let totalIndices = 0;
   for (const mesh of doc.getRoot().listMeshes()) {
     for (const prim of mesh.listPrimitives()) {
       const position = prim.getAttribute('POSITION');
@@ -75,14 +87,19 @@ async function simplifyToBudget(input, output, budget) {
           ? srcIndices.getArray()
           : new Uint32Array(srcIndices.getArray());
 
-      // The budget is a per-file (not per-primitive) target. Multi-mesh
-      // files like grave-stones divide it across many small primitives, so
-      // a single primitive can already sit under `budget` -- clamp the
-      // target to this primitive's own index count, since
-      // MeshoptSimplifier.simplifySloppy asserts target_index_count <=
-      // indices.length and a primitive already under budget needs no
-      // further simplification.
-      const targetIndexCount = Math.min(budget * 3, indicesArray.length);
+      primitives.push({ srcIndices, positionArray, indicesArray });
+      totalIndices += indicesArray.length;
+    }
+  }
+
+  const totalTriangles = totalIndices / 3;
+  const budgetIndices = budget * 3;
+
+  if (totalIndices > budgetIndices) {
+    const ratio = budgetIndices / totalIndices;
+    for (const { srcIndices, positionArray, indicesArray } of primitives) {
+      const targetIndexCount =
+        Math.min(Math.floor((indicesArray.length * ratio) / 3) * 3, indicesArray.length);
       if (targetIndexCount >= indicesArray.length) continue;
 
       const [dstIndices] = MeshoptSimplifier.simplifySloppy(
@@ -95,6 +112,22 @@ async function simplifyToBudget(input, output, budget) {
       );
       srcIndices.setArray(dstIndices);
     }
+
+    // simplifySloppy's target is advisory, not exact -- confirm the file
+    // actually landed under budget rather than trusting the ratio blindly.
+    let resultTriangles = 0;
+    for (const { srcIndices } of primitives) {
+      resultTriangles += srcIndices.getArray().length / 3;
+    }
+    if (resultTriangles > budget) {
+      console.warn(
+        `warn: ${input} simplified to ${resultTriangles} triangles, still over the ${budget} budget`,
+      );
+    }
+  } else {
+    console.log(
+      `${input}: ${totalTriangles} triangles already within <=${budget} budget, skipping simplification`,
+    );
   }
 
   mkdirSync(TMP, { recursive: true });
