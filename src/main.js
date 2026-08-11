@@ -10,6 +10,8 @@ import { CREDITS, BIO, CATALOG_URL } from './content/portfolio.js';
 import { initScroll } from './scroll.js';
 import { buildTimeline } from './timeline.js';
 import { trackHeightVh, journeyDistancePx } from './journey.js';
+import { createPicker, pointerToNdc } from './picking.js';
+import { ENGRAVED_INK, ENGRAVED_LIT } from './world/engraving.js';
 
 function webglAvailable() {
   try {
@@ -40,26 +42,72 @@ async function loadModels() {
   return { church, crow, cross, gravestoneA, gravestoneB, treeA, treeB, stones };
 }
 
-// The signpost's arms are real buttons floated over the 3D post, so the
-// choice is clickable, focusable and announced — not a mouse-only hotspot.
-function attachSignpost(app, routeState) {
-  const wrap = document.createElement('div');
-  wrap.className = 'label label-sign';
+// The sign itself is the control: clicking the carved board picks that road.
+// Hover lights the letters by changing one material colour -- the canvas
+// texture carries only the letterform alpha, so nothing is redrawn.
+//
+// `pick` (not routeState.choose directly) handles the choice: see boot()'s
+// pickRoute for why -- routeState.choose() is deliberately a no-op when the
+// requested route is already current (route.js's own test suite locks that
+// in), which left the DEFAULT route unreachable through the sign with
+// nothing else to fall back on now that the old always-present DOM buttons
+// are gone.
+function attachSignInteraction(app, routeState, canvas, pick) {
+  const picker = createPicker({ camera: app.camera });
+  picker.setTargets(app.signArms);
 
-  const beats = document.createElement('button');
-  beats.type = 'button';
-  beats.className = 'sign-arm';
-  beats.textContent = 'the beats ↑';
-  beats.addEventListener('click', () => routeState.choose('direct'));
+  let hovered = null;
+  const setHover = (arm) => {
+    if (hovered === arm) return;
+    if (hovered) hovered.userData.textMesh.material.color.setHex(ENGRAVED_INK);
+    hovered = arm;
+    if (hovered) hovered.userData.textMesh.material.color.setHex(ENGRAVED_LIT);
+    canvas.style.cursor = hovered ? 'pointer' : '';
+  };
 
-  const work = document.createElement('button');
-  work.type = 'button';
-  work.className = 'sign-arm sign-arm-work';
-  work.textContent = 'the work →';
-  work.addEventListener('click', () => routeState.choose('work'));
+  const ndcFor = (e) => pointerToNdc(e.clientX, e.clientY, canvas.getBoundingClientRect());
 
-  wrap.append(beats, work);
-  app.labels.add({ anchor: app.anchors.sign, el: wrap });
+  // Hover is resolved at most once per frame: pointermove fires far faster
+  // than the scene renders, and a raycast per event is wasted work.
+  let queued = null;
+  canvas.addEventListener('pointermove', (e) => {
+    if (routeState.isLocked()) { setHover(null); return; }
+    queued = ndcFor(e);
+  });
+  gsap.ticker.add(() => {
+    if (!queued) return;
+    setHover(picker.pick(queued));
+    queued = null;
+  });
+
+  canvas.addEventListener('click', (e) => {
+    if (routeState.isLocked()) return;
+    const arm = picker.pick(ndcFor(e));
+    if (arm) pick(arm.userData.route);
+  });
+
+  // Keyboard and screen-reader path: the same two choices as real controls.
+  for (const btn of document.querySelectorAll('#sign-controls button')) {
+    const arm = app.signArms.find((a) => a.userData.route === btn.dataset.route);
+    btn.addEventListener('focus', () => setHover(arm ?? null));
+    btn.addEventListener('blur', () => setHover(null));
+    btn.addEventListener('click', () => pick(btn.dataset.route));
+  }
+}
+
+// A parked page can read as a broken one. If the visitor reaches the sign and
+// sits there without choosing, say so quietly.
+function attachChooseHint(routeState) {
+  const hint = document.getElementById('choose-hint');
+  if (!hint) return;
+  let idleSince = null;
+  gsap.ticker.add(() => {
+    const atFork = !routeState.isLocked()
+      && window.scrollY >= (document.documentElement.scrollHeight - window.innerHeight) - 4;
+    if (!atFork) { idleSince = null; hint.classList.remove('show'); return; }
+    if (idleSince === null) idleSince = performance.now();
+    if (performance.now() - idleSince > 2500) hint.classList.add('show');
+  });
 }
 
 // Credit labels are gated on the scenic route. The monument row stands off to
@@ -117,7 +165,10 @@ async function boot() {
   // Both routes put the fork at T_FORK_SCROLL, so restoring the scroll
   // position by fraction leaves the camera exactly where it was: at the
   // signpost. Without that pinning the camera would jump on every switch.
-  const routeState = createRouteState((next) => {
+  let chosen = false;
+  function activateRoute(next) {
+    chosen = true;
+    document.getElementById('choose-hint')?.classList.remove('show');
     state.route = next;
     track.style.height = `${trackHeightVh(next, true)}vh`;
     timeline.scrollTrigger?.kill();
@@ -138,9 +189,26 @@ async function boot() {
     window.scrollTo(0, T_FORK_SCROLL * max);
     timeline = buildTimeline(state, next);
     ScrollTrigger.refresh();
-  });
+  }
+  const routeState = createRouteState(activateRoute);
 
-  attachSignpost(app, routeState);
+  // routeState.choose() is deliberately a no-op when `next` is already the
+  // current route (see route.js and its test "choosing the route already
+  // active does nothing") -- switching AWAY from a route is the only thing
+  // it models. `direct` is that current route from the moment the page
+  // loads, so picking "the beats" arm on a first visit would otherwise hit
+  // that no-op and leave the journey parked forever, with no other control
+  // left to un-park it now that the old always-present DOM buttons are gone.
+  // This is the one path where the sign needs to activate directly instead
+  // of going through routeState.
+  function pickRoute(next) {
+    if (routeState.isLocked()) return;
+    if (!chosen && next === routeState.get()) { activateRoute(next); return; }
+    routeState.choose(next);
+  }
+
+  attachSignInteraction(app, routeState, document.getElementById('scene'), pickRoute);
+  attachChooseHint(routeState);
   attachCreditLabels(app, state);
 
   ScrollTrigger.create({

@@ -158,6 +158,15 @@ body.ready #loading { opacity: 0; pointer-events: none; }
      single act boundary in choreography.js. */
   height: 1000vh;
   z-index: 4;
+  /* fix-round: this element spans the FULL document height at z-index 4,
+     above #scene's 0 -- with the default `auto`, its empty (transparent)
+     box swallowed every pointer event over the canvas, everywhere along the
+     scroll, including the carved sign at the parked fork. #chapel (the only
+     child that ever needs to be clickable) sets its own pointer-events
+     explicitly and inherits nothing from here, so this is safe to blanket
+     off. Confirmed via headless click testing, not eyeballed -- see #chapel
+     below and timeline.js ACT 5. */
+  pointer-events: none;
 }
 
 #chapel {
@@ -187,6 +196,18 @@ body.ready #loading { opacity: 0; pointer-events: none; }
      .reduced / .no-webgl below override back to opaque + visible since
      neither of those paths runs the scroll timeline. */
   opacity: 0;
+  /* fix-round: #chapel is `opacity: 0` here but still fully hit-testable --
+     opacity alone does not remove an element from hit-testing. Because
+     #chapel sits `bottom: 0` inside #scroll-track, its (invisible) box lands
+     exactly where the PARKED pre-choice document ends -- the same spot the
+     3D signpost is framed and clicked. Left interactive, this invisible
+     section (including its live BeatStars iframe) silently intercepted
+     every pointer event meant for the sign on the canvas underneath, so
+     neither hover nor click ever reached it. `none` here, flipped back to
+     `auto` in timeline.js's ACT 5 the moment #chapel is actually revealed,
+     keeps it out of the way until the journey is meant to arrive here --
+     confirmed via headless click testing at the parked fork, not eyeballed. */
+  pointer-events: none;
   background: linear-gradient(
     to bottom,
     transparent 0%,
@@ -287,6 +308,11 @@ body.ready #loading { opacity: 0; pointer-events: none; }
 .reduced #chapel {
   position: relative;
   opacity: 1;
+  /* #chapel is `pointer-events: none` at rest (see the rule above) until the
+     scroll timeline flips it to `auto` on arrival -- reduced motion never
+     runs that timeline, so without this override the embed and its links
+     would be permanently unclickable here. */
+  pointer-events: auto;
   background: radial-gradient(ellipse at 50% 30%, #2b0402, #0d0100 75%);
 }
 .reduced .hint-arrow { animation: none; }
@@ -306,34 +332,11 @@ body.ready #loading { opacity: 0; pointer-events: none; }
 .no-webgl #chapel {
   position: relative;
   opacity: 1;
+  /* Same reasoning as .reduced #chapel above: no scroll timeline runs here
+     either to flip pointer-events back to auto. */
+  pointer-events: auto;
   background: radial-gradient(ellipse at 50% 30%, #2b0402, #0d0100 75%);
 }
-
-.label-sign {
-  display: flex;
-  flex-direction: column;
-  gap: 0.55rem;
-  align-items: flex-start;
-}
-.sign-arm {
-  background: rgba(8, 7, 6, 0.55);
-  border: 1px solid rgba(216, 211, 200, 0.28);
-  color: var(--bone);
-  font-family: var(--mono);
-  font-size: 0.66rem;
-  letter-spacing: 0.28em;
-  text-transform: uppercase;
-  padding: 0.5rem 0.9rem;
-  cursor: pointer;
-  transition: border-color 0.25s, color 0.25s, background 0.25s;
-}
-.sign-arm:hover,
-.sign-arm:focus-visible {
-  border-color: var(--blood);
-  background: rgba(30, 4, 2, 0.7);
-  color: #fff;
-}
-.sign-arm-work { margin-left: 1.4rem; }
 
 .label-crypt {
   width: min(30rem, 74vw);
@@ -362,3 +365,57 @@ body.ready #loading { opacity: 0; pointer-events: none; }
   align-self: center;
 }
 .label-crypt a:hover { color: var(--bone); }
+
+/* The words are carved into the sign in the 3D scene, which assistive
+   technology cannot see. These are the same two choices as real, focusable
+   controls: clipped out of sight rather than display:none, so they stay in
+   the tab order and are announced normally. */
+#sign-controls button {
+  position: fixed;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+#sign-controls button:focus-visible {
+  width: auto;
+  height: auto;
+  margin: 0;
+  padding: 0.6rem 1rem;
+  clip-path: none;
+  left: 50%;
+  bottom: 12vh;
+  transform: translateX(-50%);
+  z-index: 7;
+  background: rgba(8, 7, 6, 0.9);
+  border: 1px solid var(--blood);
+  color: var(--bone);
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+#choose-hint {
+  position: fixed;
+  left: 50%;
+  bottom: 14vh;
+  transform: translateX(-50%);
+  z-index: 6;
+  margin: 0;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 1.2s ease;
+  font-family: var(--mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.4em;
+  text-transform: uppercase;
+  color: rgba(216, 211, 200, 0.55);
+  text-shadow: 0 0 18px rgba(0, 0, 0, 0.9);
+}
+#choose-hint.show { opacity: 1; }
+.reduced #choose-hint, .no-webgl #choose-hint { display: none; }

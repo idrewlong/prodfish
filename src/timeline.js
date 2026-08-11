@@ -104,7 +104,14 @@ export function buildTimeline(state, route = 'direct') {
   // as a jarring scene change. #chapel now starts at opacity 0 (style.css)
   // and fades in here, driven by the same scroll fraction as the camera
   // settle, so it only becomes visible once pathT has essentially arrived.
-  tl.to('#chapel', { opacity: 1, duration: (1 - chapelEnd) * 0.55, ease: 'sine.in' }, chapelEnd);
+  // fromTo (not to), and pointerEvents alongside opacity: #chapel starts
+  // `pointer-events: none` in CSS precisely so its invisible box (and live
+  // iframe) cannot swallow clicks meant for the signpost while parked at the
+  // fork -- see the CSS comment. Flipping it back to `auto` here, on the
+  // same scrub as the fade-in, is what makes the embed clickable once it has
+  // actually arrived.
+  tl.fromTo('#chapel', { opacity: 0, pointerEvents: 'none' },
+    { opacity: 1, pointerEvents: 'auto', duration: (1 - chapelEnd) * 0.55, ease: 'sine.in' }, chapelEnd);
 
   return tl;
 }

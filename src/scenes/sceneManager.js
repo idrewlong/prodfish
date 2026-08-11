@@ -170,5 +170,5 @@ export function initScene({ canvas, state, tier, models }) {
     post.composer.render();
   }
 
-  return { renderer, scene, camera, render, labels, anchors: monuments.anchors };
+  return { renderer, scene, camera, render, labels, anchors: monuments.anchors, signArms: monuments.signArms };
 }

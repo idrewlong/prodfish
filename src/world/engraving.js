@@ -4,7 +4,13 @@ import * as THREE from 'three';
 // letterform alpha (solid white on transparent); the mesh material supplies
 // the colour. That split is what lets a hover light the letters by changing
 // one material colour, with no canvas redraw and no second texture.
-export const ENGRAVED_INK = 0x0d0a08; // cut into the shadowed grain
+// fix-round: 0x0d0a08 (near-black) read as a faint smudge against the
+// board's own near-black wood (#241d16) under night lighting -- the carved
+// words were nearly illegible in practice, tests notwithstanding. Raised to
+// a weathered bone-grey/tan that reads against dark wood while the lip
+// highlight below (not flat white) still keeps it looking cut-in rather than
+// printed on.
+export const ENGRAVED_INK = 0x6b5a44; // cut into the shadowed grain, weathered and legible
 export const ENGRAVED_LIT = 0xe8c98a; // catching a little lantern light
 
 // Average glyph width for this face is close enough to 0.5em for fitting a
@@ -33,8 +39,11 @@ export function makeEngravedTexture(text, { widthPx = 512, heightPx = 128, baseP
   // A carved letter is a groove: a dark cut with a bright lip along its top
   // edge where the light catches. Drawing the lip slightly offset and then
   // the cut over it gives that read at a glance, without a normal map.
-  ctx.fillStyle = 'rgba(255,255,255,0.35)';
-  ctx.fillText(text, widthPx / 2, heightPx / 2 - fontPx * 0.045);
+  // fix-round: the lip was too faint and too close to the cut (0.35 alpha,
+  // 0.045em offset) to read as a groove at sign scale -- strengthened both so
+  // the carve reads as deep rather than a flat printed word.
+  ctx.fillStyle = 'rgba(255,255,255,0.6)';
+  ctx.fillText(text, widthPx / 2, heightPx / 2 - fontPx * 0.09);
   ctx.fillStyle = 'rgba(255,255,255,1)';
   ctx.fillText(text, widthPx / 2, heightPx / 2);
 
