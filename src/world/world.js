@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { positionAt, T_DOOR, tNearest, LANDMARKS } from './path.js';
+import { positionAt, T_DOOR } from './path.js';
 
 // Night sky/fog tone, shared with sceneManager.js. Deliberately NOT applied
 // through ACES Filmic tone mapping for the sky dome below: at the exposure
@@ -126,20 +126,18 @@ const CHAPEL_Z_STRETCH = 1;
 // than a crisp paved band, with occasional narrow "washed-out" patches.
 // The ribbon stops just shy of the doorway on whichever road it follows —
 // running it through the door would lay dirt down the aisle.
-export function roadEndT(route = 'direct') {
-  const doorT = route === 'direct' ? T_DOOR : tNearest(LANDMARKS.DOOR, route);
-  return Math.min(doorT - 0.015, 0.98);
+export function roadEndT() {
+  return Math.min(T_DOOR - 0.015, 0.98);
 }
 
-// A road nearly three times longer needs proportionally more segments, or
-// its curves visibly facet into straight lines.
-export function roadSampleCount(route = 'direct') {
-  return route === 'work' ? 260 : 90;
+// Enough segments that the curve never facets into straight lines.
+export function roadSampleCount() {
+  return 140;
 }
 
-function buildRoad(scene, route = 'direct') {
-  const steps = roadSampleCount(route);
-  const endT = roadEndT(route);
+function buildRoad(scene) {
+  const steps = roadSampleCount();
+  const endT = roadEndT();
   const baseWidth = 2.2;
   const up = new THREE.Vector3(0, 1, 0);
   const positions = [];
@@ -147,8 +145,8 @@ function buildRoad(scene, route = 'direct') {
   let vi = 0;
   for (let i = 0; i <= steps; i++) {
     const t = (endT * i) / steps;
-    const p = positionAt(t, route);
-    const ahead = positionAt(Math.min(t + 0.004, 1), route);
+    const p = positionAt(t);
+    const ahead = positionAt(Math.min(t + 0.004, 1));
     const tangent = new THREE.Vector3().subVectors(ahead, p).normalize();
     const perp = new THREE.Vector3().crossVectors(up, tangent).normalize();
     const wobble = Math.sin(i * 0.7) * 0.35 + Math.sin(i * 0.23 + 1.3) * 0.2;
@@ -174,7 +172,7 @@ function buildRoad(scene, route = 'direct') {
   geo.computeVertexNormals();
   const mat = new THREE.MeshStandardMaterial({ color: '#5a4530', roughness: 1, side: THREE.DoubleSide });
   const road = new THREE.Mesh(geo, mat);
-  road.name = `roadRibbon-${route}`;
+  road.name = 'roadRibbon';
   scene.add(road);
 }
 
@@ -296,15 +294,15 @@ function buildGrass(scene, count) {
 // far from the church so the two places read as different countries. This
 // reuses the graveyard's own grass geometry and placement helpers with
 // swampier parameters rather than introducing a second vegetation system.
-export const SWAMP_CENTRE = [42, 18];
-export const SWAMP_RADIUS = 24;
+export const SWAMP_CENTRE = [0, 24];
+export const SWAMP_RADIUS = 26;
 
 // Deterministic, and held clear of the camera corridor — the clearance test
 // is only meaningful against fixed positions.
 export function swampReedSpots(count) {
   const rand = makeLcg(0x5eed1e55);
   const samples = [];
-  for (let i = 0; i <= 120; i++) samples.push(positionAt(i / 120, 'work'));
+  for (let i = 0; i <= 120; i++) samples.push(positionAt(i / 120));
   const spots = [];
   let guard = 0;
   while (spots.length < count && guard < count * 40) {
@@ -323,20 +321,22 @@ export function swampReedSpots(count) {
   return spots;
 }
 
-// Dead trees standing back from the row, deterministic and clear of the road.
+// Cypress-style dead trees standing back from the approach, deterministic
+// and clear of the camera corridor.
 export function swampTreeSpots() {
   // Measured clearances from the scenic road, in order: 9.2, 10.2, 8.2, 7.3,
   // 5.7, 6.4, 4.6m. Two earlier spots sat on the road's RETURN leg (which
   // runs z 8 -> 4, well south of the row itself) at 2.4m and 1.35m — close
   // enough for the camera to drive through a trunk on the way home.
   return [
-    [30.5, 29.0, 0.4, 1.15],
-    [46.0, 28.2, 1.9, 1.0],
-    [61.5, 25.0, 2.6, 1.2],
-    [24.0, 12.0, 0.9, 1.05],
-    [39.0, 11.5, 2.2, 1.1],
-    [68.0, 18.0, 1.3, 0.95],
-    [20.0, 26.0, 0.2, 1.1],
+    [-9.5, 40.0, 0.4, 1.15],
+    [10.5, 36.0, 1.9, 1.0],
+    [-11.0, 31.0, 2.6, 1.2],
+    [11.5, 27.5, 0.9, 1.05],
+    [-10.0, 22.0, 2.2, 1.1],
+    [10.0, 17.5, 1.3, 0.95],
+    [-9.0, 12.0, 0.2, 1.1],
+    [9.5, 8.0, 1.6, 1.05],
   ];
 }
 
@@ -363,7 +363,7 @@ function buildSwamp(scene, models, tier) {
 
   // Reeds: the graveyard's grass blade, taller and colder, standing in and
   // around the water.
-  const count = tier === 'low' ? 260 : 700;
+  const count = tier === 'low' ? 320 : 900;
   const mesh = new THREE.InstancedMesh(
     buildGrassBladeGeometry(),
     new THREE.MeshBasicMaterial({
@@ -472,11 +472,7 @@ export function buildWorld({ scene, models, grassCount = 0, tier = 'high' }) {
   ground.rotation.x = Math.PI / 2;
   scene.add(ground);
 
-  // Both roads are dressed, not just the church one: the scenic road needs a
-  // trail through the new graveyard and back, or it reads as walking over
-  // open ground.
-  buildRoad(scene, 'direct');
-  buildRoad(scene, 'work');
+  buildRoad(scene);
   buildGrass(scene, grassCount);
   buildSwamp(scene, models, tier);
 

@@ -22,27 +22,27 @@ describe('PROP_SPOTS', () => {
 });
 
 describe('dirt roads', () => {
-  it('lays a trail on both roads, not just the church one', () => {
-    // The scenic road needs its own trail through the new graveyard and
-    // back; without it the work route reads as walking over open ground.
-    for (const route of ['direct', 'work']) {
-      const endT = roadEndT(route);
-      expect(endT).toBeGreaterThan(0.1);
-      expect(endT).toBeLessThan(1);
-      // The ribbon must stop outside the church, never down the aisle.
-      expect(positionAt(endT, route).z).toBeGreaterThan(0);
-    }
+  it('stops the trail outside the church, never down the aisle', () => {
+    const endT = roadEndT();
+    expect(endT).toBeGreaterThan(0.1);
+    expect(endT).toBeLessThan(1);
+    expect(positionAt(endT).z).toBeGreaterThan(0);
   });
-  it('samples the longer road more finely so its curves do not facet', () => {
-    expect(roadSampleCount('work')).toBeGreaterThan(roadSampleCount('direct'));
+  it('samples finely enough that the curve does not facet', () => {
+    expect(roadSampleCount()).toBeGreaterThan(100);
   });
 });
 
 describe('the swamp', () => {
-  it('sits around the monument row, not around the church', () => {
-    // The two places must read as different countries: the swamp dressing
-    // belongs to the scenic road, and the church approach must stay dry.
-    expect(Math.hypot(SWAMP_CENTRE[0], SWAMP_CENTRE[1])).toBeGreaterThan(SWAMP_RADIUS);
+  it('sits on the church approach, so the road crosses it', () => {
+    // The marsh IS the journey now, not a place off to one side: the road
+    // must run through it rather than past it.
+    let min = Infinity;
+    for (let i = 0; i <= 200; i++) {
+      const p = positionAt(i / 200);
+      min = Math.min(min, Math.hypot(p.x - SWAMP_CENTRE[0], p.z - SWAMP_CENTRE[1]));
+    }
+    expect(min).toBeLessThan(SWAMP_RADIUS * 0.5);
   });
   it('places reeds deterministically', () => {
     expect(swampReedSpots(40)).toEqual(swampReedSpots(40));
@@ -51,7 +51,7 @@ describe('the swamp', () => {
     const clearance = (x, z) => {
       let min = Infinity;
       for (let i = 0; i <= 200; i++) {
-        const p = positionAt(i / 200, 'work');
+        const p = positionAt(i / 200);
         min = Math.min(min, Math.hypot(p.x - x, p.z - z));
       }
       return min;
