@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { positionAt, FORK } from './path.js';
+import { positionAt } from './path.js';
 
 // Ten markers flanking the scenic route between ROW_IN (z 18) and CRYPT
 // (z 8), alternating sides so the walk reads as an avenue. Deterministic —
@@ -30,6 +30,21 @@ function minDistanceToRoute(x, z, route) {
   }
   return min;
 }
+
+// Exported wrapper so callers (tests included) can check clearance for an
+// arbitrary point — e.g. the signpost — without duplicating the sampling
+// loop above.
+export function minDistanceToRouteFor(x, z, route) {
+  return minDistanceToRoute(x, z, route);
+}
+
+// Position of the signpost itself, kept clear of both routes. Offsetting to
+// the +x side of the fork looks natural on paper but sits inside the work
+// route's turn (measured 0.72m clearance) -- the camera would clip it. -x is
+// the clear side: measured clearance here is 2.67m from the work route and
+// 3.00m from the direct route, both comfortably outside the 1.4m corridor
+// the monument stones are held to.
+export const SIGNPOST_SPOT = [-2.70, 25.13];
 
 // Smallest horizontal distance from any monument to the scenic route — the
 // camera must not clip a headstone as it walks the row.
@@ -110,12 +125,18 @@ function buildSignpost(scene) {
   workArm.rotation.z = -0.05;
   group.add(beatsArm, workArm);
 
-  // Stand it just off the path at the fork, angled to face the walker.
-  group.position.set(FORK.x + 1.5, 0, FORK.z);
-  group.rotation.y = -0.5;
+  // Stand it beside the road on the outside of the fork, angled to face the
+  // walker. Offsetting the other way would put the post inside the work
+  // route's turn (measured 0.72m clearance) -- the camera would clip it.
+  // Measured clearance here: 2.67m from the work route, 3.00m from the
+  // direct route, both comfortably outside the 1.4m corridor the monument
+  // stones are held to.
+  const [SIGN_X, SIGN_Z] = SIGNPOST_SPOT;
+  group.position.set(SIGN_X, 0, SIGN_Z);
+  group.rotation.y = 0.38;
   scene.add(group);
 
-  const anchor = new THREE.Vector3(FORK.x + 1.5, 2.55, FORK.z);
+  const anchor = new THREE.Vector3(SIGN_X, 2.55, SIGN_Z);
   return { group, anchor };
 }
 

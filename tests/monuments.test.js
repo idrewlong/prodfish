@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   MONUMENT_SPOTS, minWorkPathClearance, minDirectPathDistance, sideOfRoute,
+  SIGNPOST_SPOT, minDistanceToRouteFor,
 } from '../src/world/monuments.js';
 import { CREDITS } from '../src/content/portfolio.js';
 
@@ -25,5 +26,10 @@ describe('MONUMENT_SPOTS', () => {
   it('spreads the stones along the row rather than bunching them', () => {
     const zs = MONUMENT_SPOTS.map(([, z]) => z);
     expect(Math.max(...zs) - Math.min(...zs)).toBeGreaterThan(6);
+  });
+  it('stands the signpost clear of the camera corridor on both routes', () => {
+    const [x, z] = SIGNPOST_SPOT;
+    expect(minDistanceToRouteFor(x, z, 'work')).toBeGreaterThan(1.4);
+    expect(minDistanceToRouteFor(x, z, 'direct')).toBeGreaterThan(1.4);
   });
 });
