@@ -46,6 +46,8 @@ const PROP_TRIANGLE_BUDGET = {
   // Ten separate markers in one file, so this budget covers all ten -- the
   // per-prop 3000 would flatten the whole set.
   'grave-stones': 8000,
+  rider: 4000,
+  motorcycle: 4500,
 };
 
 // Models whose consumers depend on distinct mesh boundaries surviving the
