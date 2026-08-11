@@ -297,7 +297,7 @@ function buildGrass(scene, count) {
 // reuses the graveyard's own grass geometry and placement helpers with
 // swampier parameters rather than introducing a second vegetation system.
 export const SWAMP_CENTRE = [42, 18];
-export const SWAMP_RADIUS = 30;
+export const SWAMP_RADIUS = 24;
 
 // Deterministic, and held clear of the camera corridor — the clearance test
 // is only meaningful against fixed positions.
@@ -345,12 +345,19 @@ function buildSwamp(scene, models, tier) {
   // ground's own edge rather than a modelled bank.
   const water = new THREE.Mesh(
     new THREE.CircleGeometry(SWAMP_RADIUS, 56),
+    // Reads as still water catching the night sky, not a hole in the world.
+    // At #0a1110 with metalness 0.55 there was nothing in this scene for it
+    // to reflect, so it rendered as a black void the trail appeared to
+    // float over.
     new THREE.MeshStandardMaterial({
-      color: '#0a1110', roughness: 0.18, metalness: 0.55,
+      color: '#26332f', roughness: 0.3, metalness: 0.25,
     }),
   );
   water.rotation.x = -Math.PI / 2;
-  water.position.set(SWAMP_CENTRE[0], -0.05, SWAMP_CENTRE[1]);
+  // Just ABOVE the ground plane, but just BELOW the dirt trail (y=0.012):
+  // at -0.05 the opaque ground hid it completely, and anything above the
+  // trail would flood the road the camera drives along.
+  water.position.set(SWAMP_CENTRE[0], 0.006, SWAMP_CENTRE[1]);
   water.name = 'swampWater';
   scene.add(water);
 
