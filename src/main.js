@@ -6,7 +6,7 @@ import { initScene } from './scenes/sceneManager.js';
 import { createAssetLoader } from './world/assets.js';
 import { T_DOOR, T_GATE, T_FORK_SCROLL } from './world/path.js';
 import { createRouteState } from './world/route.js';
-import { CREDITS, BIO, CATALOG_URL } from './content/portfolio.js';
+import { CREDITS, BIO, CATALOG_URL, SOCIALS } from './content/portfolio.js';
 import { initScroll } from './scroll.js';
 import { buildTimeline } from './timeline.js';
 import { trackHeightVh, journeyDistancePx } from './journey.js';
@@ -287,6 +287,43 @@ function bootFailed(err) {
   loading.style.display = 'flex';
   loading.style.opacity = '1';
 }
+
+// Fills the static section from the same content module the carved stone
+// and plaster use, so the two presentations can never drift apart. Runs
+// unconditionally -- the section is CSS-hidden unless a fallback class is
+// set, which keeps this to one code path.
+function fillStaticPortfolio() {
+  const list = document.querySelector('.work-list');
+  const bio = document.querySelector('.work-bio');
+  const socialNav = document.querySelector('.work-socials');
+  const catalog = document.querySelector('.work-catalog');
+  if (!list || !bio || !socialNav || !catalog) return;
+  for (const c of CREDITS) {
+    const li = document.createElement('li');
+    const a = document.createElement('a');
+    a.href = c.url;
+    a.target = '_blank';
+    a.rel = 'noopener';
+    const artist = document.createElement('span');
+    artist.className = 'work-artist';
+    artist.textContent = c.artist;
+    a.append(artist, document.createTextNode(c.track));
+    li.append(a);
+    list.append(li);
+  }
+  bio.textContent = BIO;
+  for (const s of SOCIALS) {
+    const a = document.createElement('a');
+    a.href = s.url;
+    a.target = '_blank';
+    a.rel = 'noopener';
+    a.textContent = s.label;
+    socialNav.append(a);
+  }
+  catalog.href = CATALOG_URL;
+}
+
+fillStaticPortfolio();
 
 if (prefersReduced) document.body.classList.add('reduced');
 
