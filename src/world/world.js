@@ -983,13 +983,20 @@ export function buildWorld({ scene, models, grassCount = 0, tier = 'high' }) {
   const DOOR_WIDTH = 1.89;
   const DOOR_HEIGHT = 2.49;
   const DOOR_Z = -2.01;
+  // Hinged on the RIGHT jamb, opening inward. Two constraints fix this and
+  // neither is negotiable: the leaf sits 1.6m back inside a stepped Gothic
+  // reveal, and the porch posts stand directly in front of the opening --
+  // so an OUTWARD swing drives the leaf through the jamb steps and then
+  // through a post. Inward is the only direction with air in it. Hinging
+  // right rather than left swings the leaf away from the camera's own
+  // leftward drift on approach, so it clears the view of the altar sooner.
   const door = new THREE.Group();
-  door.position.set(DOOR_LEFT_X, 0, DOOR_Z);
+  door.position.set(DOOR_LEFT_X + DOOR_WIDTH, 0, DOOR_Z);
   const leaf = new THREE.Mesh(
     new THREE.BoxGeometry(DOOR_WIDTH, DOOR_HEIGHT, 0.09),
     new THREE.MeshStandardMaterial({ color: '#171310', roughness: 0.9 }),
   );
-  leaf.position.set(DOOR_WIDTH / 2, DOOR_HEIGHT / 2, 0);
+  leaf.position.set(-DOOR_WIDTH / 2, DOOR_HEIGHT / 2, 0);
   door.add(leaf);
   scene.add(door);
 

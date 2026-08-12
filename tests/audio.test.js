@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { crickChance, duckLevel, mixGain } from '../src/audio.js';
+import { crickChance, duckLevel, mixGain, stepsFor, STRIDE_M } from '../src/audio.js';
 
 describe('crickChance', () => {
   it('never goes negative or exceeds the base rate', () => {
@@ -53,5 +53,23 @@ describe('mixGain', () => {
   it('clamps nonsense input instead of blowing out the gain', () => {
     expect(mixGain(5, 5, 1)).toBe(1);
     expect(mixGain(-3, 1, 1)).toBe(0);
+  });
+});
+
+describe('stepsFor', () => {
+  it('counts a footfall roughly every stride', () => {
+    expect(stepsFor(0)).toBe(0);
+    expect(stepsFor(STRIDE_M * 3.5)).toBe(3);
+  });
+  it('never counts backwards', () => {
+    expect(stepsFor(-5)).toBe(0);
+  });
+  it('is monotonic, so a walk never loses a step', () => {
+    let prev = 0;
+    for (let d = 0; d < 60; d += 0.13) {
+      const n = stepsFor(d);
+      expect(n).toBeGreaterThanOrEqual(prev);
+      prev = n;
+    }
   });
 });

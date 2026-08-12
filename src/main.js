@@ -53,6 +53,7 @@ async function boot() {
     onThunder: () => ambience.thunder(),
     onDoor: () => ambience.creak(),
     onCandle: () => ambience.candle(),
+    onStep: (n) => ambience.step(n),
   });
   document.body.classList.add('ready');
 

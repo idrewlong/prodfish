@@ -3,6 +3,7 @@ import { TIERS } from '../device.js';
 import { positionAt, targetAt } from '../world/path.js';
 import { buildWorld, NIGHT_SKY, setWind } from '../world/world.js';
 import { createWeather } from '../world/weather.js';
+import { STRIDE_M } from '../audio.js';
 import { createCrows } from '../world/crows.js';
 import { createCandles } from '../world/candles.js';
 import { doorAngle } from '../world/events.js';
@@ -10,7 +11,9 @@ import { createFireflies } from './particles.js';
 import { createPost } from './post.js';
 import { buildMonuments } from '../world/monuments.js';
 
-export function initScene({ canvas, state, tier, models, onThunder, onDoor, onCandle }) {
+export function initScene({
+  canvas, state, tier, models, onThunder, onDoor, onCandle, onStep,
+}) {
   const settings = TIERS[tier];
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, alpha: false });
   renderer.setClearColor(NIGHT_SKY, 1);
@@ -124,6 +127,10 @@ export function initScene({ canvas, state, tier, models, onThunder, onDoor, onCa
   });
 
   let doorSounded = false;
+  let travelled = 0;
+  let stepCount = 0;
+  const lastPos = new THREE.Vector3();
+  let hasLast = false;
   const clock = new THREE.Clock();
   const look = new THREE.Vector3();
   function render() {
@@ -165,6 +172,21 @@ export function initScene({ canvas, state, tier, models, onThunder, onDoor, onCa
     } else if (state.doorT < 0.01) {
       doorSounded = false;
     }
+    // Footfalls follow distance travelled, not time: stop scrolling and the
+    // walking stops. Only counts forward motion, so scrubbing backwards is
+    // silent rather than walking in reverse.
+    if (hasLast) {
+      const moved = pos.distanceTo(lastPos);
+      if (moved > 0.0005 && pos.z <= lastPos.z) travelled += moved;
+      const due = Math.floor(travelled / STRIDE_M);
+      if (due > stepCount) {
+        stepCount = due;
+        onStep?.(stepCount);
+      }
+    }
+    lastPos.copy(pos);
+    hasLast = true;
+
     world.door.rotation.y = doorAngle(state.doorT);
     scene.fog.density = state.fog;
 

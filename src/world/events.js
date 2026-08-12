@@ -24,7 +24,9 @@ export function crowPhase(crowT, i) {
   return clamp01((clamp01(crowT) - start) / 0.6);
 }
 
-// Door swings INWARD, into the nave, up to ~100 degrees.
+// Door swings INWARD, into the nave, up to ~100 degrees. Negative because
+// the hinge is on the RIGHT jamb (see world.js): from that pivot, a
+// negative Y rotation is the one that carries the leaf inward.
 //
 // The sign matters and was wrong: a negative rotation swung the leaf out
 // through the portal, and this is a stepped Gothic reveal 1.6m deep, so
@@ -33,5 +35,5 @@ export function crowPhase(crowT, i) {
 // the pillar. Church doors of this kind open inward anyway.
 export function doorAngle(doorT) {
   const t = clamp01(doorT);
-  return t === 0 ? 0 : t * 1.75;
+  return t === 0 ? 0 : -t * 1.75;
 }
