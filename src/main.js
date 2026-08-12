@@ -51,9 +51,6 @@ async function boot() {
     canvas: document.getElementById('scene'),
     state, tier, models,
     onThunder: () => ambience.thunder(),
-    onDoor: () => ambience.creak(),
-    onCandle: () => ambience.candle(),
-    onStep: (n) => ambience.step(n),
   });
   document.body.classList.add('ready');
 

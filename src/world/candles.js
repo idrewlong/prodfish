@@ -90,7 +90,7 @@ export const CANDLE_Z_SPAN = 7.4;
 // altar. Flames are camera-facing additive sprites; a small pool of real
 // point lights follows the most recently lit candles so low tiers stay
 // cheap.
-export function createCandles({ scene, altarAnchor, crossGltf, maxLights, onCandleLit }) {
+export function createCandles({ scene, altarAnchor, crossGltf, maxLights }) {
   const candles = [];
   const glowTex = makeGlowTexture();
   const flameTex = makeFlameTexture();
@@ -189,12 +189,9 @@ export function createCandles({ scene, altarAnchor, crossGltf, maxLights, onCand
     }));
   }
 
-  let lastLitCount = 0;
-
   return {
     TOTAL,
     update(candleT, crossGlow, elapsed) {
-      const litBefore = lastLitCount;
       const litIdx = [];
       candles.forEach((c, i) => {
         const k = candleIntensity(candleT, i, TOTAL);
@@ -224,10 +221,17 @@ export function createCandles({ scene, altarAnchor, crossGltf, maxLights, onCand
 
         if (k > 0.15) litIdx.push(i);
       });
-      // Report each new catch exactly once, so a sound can follow it. Only
-      // counted upward: scrubbing back must not fire a burst of ignitions.
-      if (litIdx.length > litBefore) onCandleLit?.(litIdx.length - litBefore);
-      lastLitCount = litIdx.length;
+      // Candles light silently. There was an ignition sound here, fired
+      // through an onCandleLit callback as each new candle caught; it read as
+      // a light switch clicking on rather than as a wick, so it is gone, and
+      // the per-frame "how many are newly lit" bookkeeping went with it --
+      // nothing else ever consumed it.
+      //
+      // Worth remembering if a cue is ever wanted here again: this runs inside
+      // the render loop, so anything that throws in a callback fired from here
+      // takes the frame down with it, before the scene is presented. A dead
+      // ambience.candle() reference is what once froze the whole journey at
+      // the church door.
 
       // Real lights track the last-lit candles (highest indices).
       lights.forEach((l, j) => {

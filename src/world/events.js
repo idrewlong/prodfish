@@ -24,16 +24,19 @@ export function crowPhase(crowT, i) {
   return clamp01((clamp01(crowT) - start) / 0.6);
 }
 
-// Door swings INWARD, into the nave, up to ~100 degrees. Negative because
-// the hinge is on the RIGHT jamb (see world.js): from that pivot, a
-// negative Y rotation is the one that carries the leaf inward.
+// Door swings OUTWARD, toward the camera/exterior, hinged on the LEFT jamb
+// (see world.js). Negative Y rotation is the one that carries the leaf out
+// through the portal from that pivot.
 //
-// The sign matters and was wrong: a negative rotation swung the leaf out
-// through the portal, and this is a stepped Gothic reveal 1.6m deep, so
-// there is solid masonry -- the jamb steps and the flanking pilaster --
-// exactly where an outward swing travels. The leaf drove straight through
-// the pillar. Church doors of this kind open inward anyway.
+// Capped at 90 degrees (MAX_ANGLE), not the full ~100-110 a swinging door
+// would travel in open air: past flush-against-the-wall, the leaf's outer
+// edge swings back into the flanking pilaster that sits right at the jamb
+// line, in this stepped 1.6m-deep Gothic reveal. Stopping at flush is both
+// the point it stays clear of that stonework and the natural resting pose
+// for a door swung all the way open.
+const MAX_ANGLE = Math.PI / 2;
+
 export function doorAngle(doorT) {
   const t = clamp01(doorT);
-  return t === 0 ? 0 : -t * 1.75;
+  return t === 0 ? 0 : -t * MAX_ANGLE;
 }

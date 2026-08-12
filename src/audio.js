@@ -24,16 +24,6 @@ export function mixGain(userVolume, duck, ceiling = 0.9) {
   return Math.max(0, Math.min(1, userVolume)) * Math.max(0, Math.min(1, duck)) * ceiling;
 }
 
-// How many footfalls a given distance covers. A stride is ~0.75m, and the
-// camera is a person walking, so steps follow DISTANCE TRAVELLED rather
-// than time -- stop scrolling and the walking stops, which is the whole
-// point.
-export const STRIDE_M = 0.78;
-
-export function stepsFor(distanceM) {
-  return Math.max(0, Math.floor(distanceM / STRIDE_M));
-}
-
 export function crickChance(elapsed, rate) {
   // Chirps come in bursts, not on a metronome: a slow envelope gates a
   // faster trigger, so the field goes quiet and picks up again.
@@ -181,112 +171,6 @@ export function createAmbience() {
       duck = level;
       if (!started) return;
       master.gain.linearRampToValueAtTime(mixGain(userVolume, duck), ctx.currentTime + 0.5);
-    },
-
-    // A dry hinge. Real creak is stick-slip: the door binds, releases, and
-    // rings the timber -- a burst of short pitched squeaks at irregular
-    // intervals, not one smooth sweep. The previous version swept a filter
-    // across white noise, which is the textbook recipe for a WHOOSH and
-    // sounded like one. These are tuned oscillators through a resonant
-    // filter instead, so they read as timber under strain.
-    creak() {
-      if (!started) return;
-      const now = ctx.currentTime;
-
-      // The squeaks, slowing and dropping in pitch as the door swings wide.
-      let at = now + 0.05;
-      const count = 7 + Math.floor(Math.random() * 4);
-      for (let i = 0; i < count; i++) {
-        const u = i / count;
-        const osc = ctx.createOscillator();
-        osc.type = 'sawtooth';
-        const base = 520 - u * 260 + (Math.random() - 0.5) * 70;
-        osc.frequency.setValueAtTime(base, at);
-        // Each squeak bends upward as the timber binds, then releases.
-        osc.frequency.linearRampToValueAtTime(base * 1.35, at + 0.05);
-        osc.frequency.linearRampToValueAtTime(base * 0.9, at + 0.11);
-
-        const bp = ctx.createBiquadFilter();
-        bp.type = 'bandpass';
-        bp.frequency.value = base * 2.1;
-        bp.Q.value = 7;
-
-        const g = ctx.createGain();
-        const peak = 0.05 + Math.random() * 0.05;
-        g.gain.setValueAtTime(0.0001, at);
-        g.gain.exponentialRampToValueAtTime(peak, at + 0.012);
-        g.gain.exponentialRampToValueAtTime(0.0001, at + 0.13);
-
-        osc.connect(bp).connect(g).connect(master);
-        osc.start(at);
-        osc.stop(at + 0.16);
-        // Irregular gaps, widening as it opens.
-        at += 0.07 + u * 0.11 + Math.random() * 0.05;
-      }
-
-      // The body of the door groaning under its own weight, underneath.
-      const groan = ctx.createOscillator();
-      groan.type = 'triangle';
-      groan.frequency.setValueAtTime(78, now);
-      groan.frequency.linearRampToValueAtTime(54, now + 1.1);
-      const gg = ctx.createGain();
-      gg.gain.setValueAtTime(0.0001, now);
-      gg.gain.exponentialRampToValueAtTime(0.07, now + 0.25);
-      gg.gain.exponentialRampToValueAtTime(0.0001, now + 1.3);
-      groan.connect(gg).connect(master);
-      groan.start(now);
-      groan.stop(now + 1.4);
-
-      // And the latch knocking as it comes to rest.
-      const knock = ctx.createOscillator();
-      knock.type = 'triangle';
-      const kAt = at + 0.1;
-      knock.frequency.setValueAtTime(130, kAt);
-      knock.frequency.exponentialRampToValueAtTime(62, kAt + 0.16);
-      const kg = ctx.createGain();
-      kg.gain.setValueAtTime(0.0001, kAt);
-      kg.gain.exponentialRampToValueAtTime(0.14, kAt + 0.02);
-      kg.gain.exponentialRampToValueAtTime(0.0001, kAt + 0.24);
-      knock.connect(kg).connect(master);
-      knock.start(kAt);
-      knock.stop(kAt + 0.3);
-    },
-
-    // A footfall on wet dirt: a short scuff of filtered noise with a soft
-    // body under it. Alternates weight slightly so a walk never sounds like
-    // the same sample on repeat.
-    step(index) {
-      if (!started) return;
-      const now = ctx.currentTime;
-      const heavy = index % 2 === 0;
-
-      const src = ctx.createBufferSource();
-      src.buffer = noiseBuffer(0.22, 'white');
-      const bp = ctx.createBiquadFilter();
-      bp.type = 'bandpass';
-      bp.frequency.setValueAtTime(heavy ? 900 : 1150, now);
-      bp.frequency.exponentialRampToValueAtTime(380, now + 0.14);
-      bp.Q.value = 1.1;
-      const g = ctx.createGain();
-      const peak = (heavy ? 0.07 : 0.055) * (0.85 + Math.random() * 0.3);
-      g.gain.setValueAtTime(0.0001, now);
-      g.gain.exponentialRampToValueAtTime(peak, now + 0.012);
-      g.gain.exponentialRampToValueAtTime(0.0001, now + 0.19);
-      src.connect(bp).connect(g).connect(master);
-      src.start(now);
-      src.stop(now + 0.24);
-
-      const body = ctx.createOscillator();
-      body.type = 'sine';
-      body.frequency.setValueAtTime(heavy ? 96 : 116, now);
-      body.frequency.exponentialRampToValueAtTime(52, now + 0.1);
-      const bg = ctx.createGain();
-      bg.gain.setValueAtTime(0.0001, now);
-      bg.gain.exponentialRampToValueAtTime(0.045, now + 0.012);
-      bg.gain.exponentialRampToValueAtTime(0.0001, now + 0.14);
-      body.connect(bg).connect(master);
-      body.start(now);
-      body.stop(now + 0.18);
     },
 
     // Thunder is called by the weather, so the rumble follows its own flash.

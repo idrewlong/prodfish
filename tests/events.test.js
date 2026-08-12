@@ -43,12 +43,12 @@ describe('crowPhase', () => {
 });
 
 describe('doorAngle', () => {
-  it('closed at 0, opens inward past 90 degrees at 1, clamped', () => {
+  it('closed at 0, opens outward to 90 degrees at 1, clamped', () => {
     expect(doorAngle(0)).toBe(0);
-    // The leaf must swing into the NAVE: opening outward drove it through
-    // the portal's stepped jamb and then a porch post. Sign follows the
-    // hinge, which is on the right jamb.
-    expect(Math.abs(doorAngle(1))).toBeGreaterThan(Math.PI / 2);
+    // The leaf swings OUT through the portal, hinged on the left jamb, and
+    // stops flush against the reveal wall at 90 degrees rather than
+    // continuing on into the flanking pilaster.
+    expect(doorAngle(1)).toBeCloseTo(-Math.PI / 2, 5);
     expect(doorAngle(1)).toBeLessThan(0);
     expect(doorAngle(2)).toBe(doorAngle(1));
   });
