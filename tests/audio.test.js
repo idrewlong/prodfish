@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { crickChance, duckLevel } from '../src/audio.js';
+import { crickChance, duckLevel, mixGain } from '../src/audio.js';
 
 describe('crickChance', () => {
   it('never goes negative or exceeds the base rate', () => {
@@ -37,5 +37,21 @@ describe('duckLevel', () => {
   });
   it('never goes negative', () => {
     for (let p = 0; p <= 1; p += 0.02) expect(duckLevel(p)).toBeGreaterThanOrEqual(0);
+  });
+});
+
+describe('mixGain', () => {
+  it('combines the visitor’s level with the scroll duck', () => {
+    expect(mixGain(1, 1, 1)).toBe(1);
+    expect(mixGain(0.5, 1, 1)).toBe(0.5);
+    expect(mixGain(1, 0.15, 1)).toBeCloseTo(0.15, 5);
+  });
+  it('lets the duck still apply at full user volume', () => {
+    // Turning it up during the beats must not defeat the duck.
+    expect(mixGain(1, duckLevel(1), 1)).toBeLessThan(mixGain(1, duckLevel(0), 1));
+  });
+  it('clamps nonsense input instead of blowing out the gain', () => {
+    expect(mixGain(5, 5, 1)).toBe(1);
+    expect(mixGain(-3, 1, 1)).toBe(0);
   });
 });

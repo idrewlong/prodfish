@@ -420,3 +420,38 @@ body.ready #loading { opacity: 0; pointer-events: none; }
 #sound[aria-pressed='true'] { color: var(--bone); border-color: rgba(193, 23, 15, 0.6); }
 #sound .sound-mark { font-size: 0.85rem; line-height: 1; }
 @media (max-width: 640px) { #sound .sound-word { display: none; } }
+
+/* Volume sits under the toggle and only appears once sound is on: a slider
+   for something that is not playing is just clutter. */
+#volume {
+  position: fixed;
+  right: 1.1rem;
+  bottom: 3.4rem;
+  z-index: 7;
+  width: 6.4rem;
+  height: 2px;
+  appearance: none;
+  background: rgba(216, 211, 200, 0.25);
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.35s ease;
+}
+body.sound-on #volume { opacity: 1; pointer-events: auto; }
+#volume::-webkit-slider-thumb {
+  appearance: none;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--bone);
+  border: 1px solid rgba(193, 23, 15, 0.7);
+}
+#volume::-moz-range-thumb {
+  width: 11px;
+  height: 11px;
+  border: 1px solid rgba(193, 23, 15, 0.7);
+  border-radius: 50%;
+  background: var(--bone);
+}
+#volume:focus-visible { outline: 1px solid var(--blood); outline-offset: 5px; }
+.reduced #volume, .no-webgl #volume { position: fixed; }

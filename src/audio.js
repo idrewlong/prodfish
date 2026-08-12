@@ -17,6 +17,13 @@ export function duckLevel(scrollProgress, beatsStart = 0.82) {
   return 1 - 0.85 * into;
 }
 
+// The final gain is the visitor's setting multiplied by the scroll duck, so
+// the two never fight: turning it up during the beats still respects the
+// duck, and scrolling back out restores whatever level they chose.
+export function mixGain(userVolume, duck, ceiling = 0.9) {
+  return Math.max(0, Math.min(1, userVolume)) * Math.max(0, Math.min(1, duck)) * ceiling;
+}
+
 export function crickChance(elapsed, rate) {
   // Chirps come in bursts, not on a metronome: a slow envelope gates a
   // faster trigger, so the field goes quiet and picks up again.
@@ -29,6 +36,8 @@ export function createAmbience() {
   let master = null;
   let timer = null;
   let started = false;
+  let userVolume = 0.7;
+  let duck = 1;
 
   function noiseBuffer(seconds) {
     const len = Math.floor(ctx.sampleRate * seconds);
@@ -125,7 +134,7 @@ export function createAmbience() {
       wind();
       timer = setInterval(tick, 500);
       // Fade up, so it arrives rather than switches on.
-      master.gain.linearRampToValueAtTime(0.9, ctx.currentTime + 2.5);
+      master.gain.linearRampToValueAtTime(mixGain(userVolume, duck), ctx.currentTime + 2.5);
       started = true;
     },
 
@@ -138,10 +147,20 @@ export function createAmbience() {
       started = false;
     },
 
+    get volume() { return userVolume; },
+
+    // The visitor's own level, 0..1. Kept even while stopped, so turning
+    // sound back on restores what they chose rather than resetting.
+    setVolume(v) {
+      userVolume = Math.max(0, Math.min(1, v));
+      if (started) master.gain.linearRampToValueAtTime(mixGain(userVolume, duck), ctx.currentTime + 0.12);
+    },
+
     // Ducked by the scroll position: see duckLevel above.
     setDuck(level) {
+      duck = level;
       if (!started) return;
-      master.gain.linearRampToValueAtTime(0.9 * level, ctx.currentTime + 0.5);
+      master.gain.linearRampToValueAtTime(mixGain(userVolume, duck), ctx.currentTime + 0.5);
     },
 
     // A dry hinge. Resonant band-passed noise whose pitch falls as the door

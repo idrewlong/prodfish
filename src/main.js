@@ -181,10 +181,21 @@ if (panelRoot) createPanels(panelRoot);
 const ambience = createAmbience();
 const soundBtn = document.getElementById('sound');
 
+const volumeSlider = document.getElementById('volume');
+
 function markSound(on) {
+  document.body.classList.toggle('sound-on', on);
   if (!soundBtn) return;
   soundBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
   soundBtn.setAttribute('aria-label', on ? 'turn ambient sound off' : 'turn ambient sound on');
+}
+
+if (volumeSlider) {
+  ambience.setVolume(volumeSlider.value / 100);
+  volumeSlider.addEventListener('input', () => ambience.setVolume(volumeSlider.value / 100));
+  // Dragging the slider must not also count as the "first interaction" that
+  // starts the sound, or grabbing it would fire audio before it is aimed.
+  volumeSlider.addEventListener('pointerdown', (e) => e.stopPropagation());
 }
 
 // Every browser refuses to start audio until the visitor has interacted with
