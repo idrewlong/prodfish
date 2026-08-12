@@ -273,6 +273,7 @@ function buildGrass(scene, count) {
     alphaTest: 0.35,
     side: THREE.DoubleSide,
   });
+  applySway(mat, 0.055, 0.55);
   const mesh = new THREE.InstancedMesh(geo, mat, count);
   mesh.name = 'grassField';
   const dummy = new THREE.Object3D();
@@ -313,6 +314,126 @@ function buildGrass(scene, count) {
 }
 
 
+
+
+// Wind. Both the graveyard grass and the swamp reeds are instanced blades, so
+// bending them per-instance on the CPU would mean rewriting every matrix
+// every frame. Instead the material's vertex shader bends each blade by its
+// own height above the ground -- roots stay put, tips move -- driven by one
+// shared uniform. Cost is a few instructions per vertex.
+const windUniforms = { uWind: { value: 0 } };
+
+export function setWind(t) {
+  windUniforms.uWind.value = t;
+}
+
+function applySway(material, amount, speed) {
+  material.onBeforeCompile = (shader) => {
+    shader.uniforms.uWind = windUniforms.uWind;
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', `#include <common>
+        uniform float uWind;`)
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+        {
+          // Sway scales with height up the blade, so it hinges at the root.
+          float bladeH = max(transformed.y, 0.0);
+          #ifdef USE_INSTANCING
+            float seed = instanceMatrix[3][0] * 0.7 + instanceMatrix[3][2] * 1.3;
+          #else
+            float seed = 0.0;
+          #endif
+          float gust = sin(uWind * ${speed.toFixed(2)} + seed)
+                     + 0.4 * sin(uWind * ${(speed * 2.3).toFixed(2)} + seed * 1.7);
+          transformed.x += gust * bladeH * ${amount.toFixed(3)};
+          transformed.z += gust * bladeH * ${(amount * 0.6).toFixed(3)};
+        }`);
+  };
+  material.needsUpdate = true;
+}
+
+
+// Warm light from inside the church, so the building reads as occupied
+// rather than derelict long before the door is reachable.
+//
+// An earlier version added a glowing DISC on the facade to stand in for lit
+// glass. It sat at z=+0.35 while the facade's front face is at z=-0.4, so it
+// floated in front of the building like a brown moon stuck to the steeple.
+// There is no disc now: just light, placed inside, spilling out through the
+// openings the model already has. Light cannot end up in front of a wall.
+function buildWindowGlow(scene) {
+  const inner = new THREE.PointLight('#ffa94d', 9, 22, 2);
+  inner.position.set(0, 6.5, -3.4);
+  scene.add(inner);
+
+  // A second, tighter source behind the rose window itself, high in the
+  // gable, so the tracery catches some of it from outside.
+  const rose = new THREE.PointLight('#ffb45e', 5, 12, 2.2);
+  rose.position.set(0, 12.4, -1.6);
+  scene.add(rose);
+
+  return { inner, rose };
+}
+
+// Mist banks: a handful of big, soft, near-horizontal sheets lying low over
+// the water. Fog alone is uniform and gives no sense of depth BETWEEN
+// things; these drift slowly across the road and put visible layers between
+// the camera and the treeline, which is the single most low-country thing
+// the scene was missing.
+function buildMist(scene) {
+  const tex = makeMistTexture();
+  const banks = [];
+  const spec = [
+    [0, 1.1, 34, 30, 0.30],
+    [-9, 0.8, 24, 26, 0.24],
+    [11, 1.3, 18, 24, 0.22],
+    [3, 0.7, 8, 22, 0.20],
+    [-6, 1.5, 44, 28, 0.18],
+  ];
+  spec.forEach(([x, y, z, size, opacity], i) => {
+    const m = new THREE.Mesh(
+      new THREE.PlaneGeometry(size, size * 0.42),
+      new THREE.MeshBasicMaterial({
+        map: tex, transparent: true, opacity, depthWrite: false,
+        color: '#8fa3b5', side: THREE.DoubleSide,
+      }),
+    );
+    m.rotation.x = -Math.PI / 2.35;
+    m.position.set(x, y, z);
+    m.renderOrder = 2;
+    scene.add(m);
+    banks.push({ mesh: m, baseX: x, drift: 0.12 + i * 0.04, phase: i * 1.7 });
+  });
+  return banks;
+}
+
+function makeMistTexture() {
+  const size = 256;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  const rand = makeLcg(0x3f0661a);
+  ctx.clearRect(0, 0, size, size);
+  for (let i = 0; i < 60; i++) {
+    const cx = rand() * size;
+    const cy = size * (0.3 + rand() * 0.4);
+    const r = 20 + rand() * 60;
+    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+    g.addColorStop(0, `rgba(255,255,255,${0.05 + rand() * 0.09})`);
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, size, size);
+  }
+  // Fade the edges so the sheets never show a hard rectangle.
+  const edge = ctx.createLinearGradient(0, 0, 0, size);
+  edge.addColorStop(0, 'rgba(0,0,0,1)');
+  edge.addColorStop(0.5, 'rgba(0,0,0,0)');
+  edge.addColorStop(1, 'rgba(0,0,0,1)');
+  ctx.globalCompositeOperation = 'destination-out';
+  ctx.fillStyle = edge;
+  ctx.fillRect(0, 0, size, size);
+  return new THREE.CanvasTexture(canvas);
+}
 
 // ------------------------------------------------------------ backdrop ---
 // Rolling hills and thick pine woods ringing the whole scene, so the church
@@ -532,6 +653,8 @@ function makeWaterTexture() {
   return tex;
 }
 
+let swampWater = null;
+
 function buildSwamp(scene, models, tier) {
   // Standing swamp water. Two things it must NOT be: a black void (the first
   // version, too dark and metallic to reflect anything in this scene) or a
@@ -575,6 +698,7 @@ function buildSwamp(scene, models, tier) {
   water.position.set(SWAMP_CENTRE[0], 0.006, SWAMP_CENTRE[1]);
   water.name = 'swampWater';
   scene.add(water);
+  swampWater = water;
 
   // Reeds: the graveyard's grass blade, taller and colder, standing in and
   // around the water.
@@ -591,6 +715,8 @@ function buildSwamp(scene, models, tier) {
     count,
   );
   mesh.name = 'swampReeds';
+  // Reeds are taller and stand in water, so they move more than the grass.
+  applySway(mesh.material, 0.09, 0.42);
   const dummy = new THREE.Object3D();
   const spots = swampReedSpots(count);
   spots.forEach(([x, z], i) => {
@@ -700,6 +826,8 @@ export function buildWorld({ scene, models, grassCount = 0, tier = 'high' }) {
   buildGrass(scene, grassCount);
   buildSwamp(scene, models, tier);
   buildBackdrop(scene, tier);
+  const rose = buildWindowGlow(scene);
+  const mist = buildMist(scene);
 
   // Moonlight from behind the chapel + a hemisphere fill so silhouettes read
   // in the fog without flattening the southern-gothic near-dark mood.
@@ -948,6 +1076,9 @@ export function buildWorld({ scene, models, grassCount = 0, tier = 'high' }) {
     chapelRoot,
     door,
     altarAnchor,
+    rose,
+    mist,
+    water: swampWater,
     roofline: { y: roofHeightAt(0), z: roofZ, heightAt: roofHeightAt },
   };
 }

@@ -9,7 +9,8 @@ import { CREDITS, BIO, CATALOG_URL, SOCIALS } from './content/portfolio.js';
 import { initScroll } from './scroll.js';
 import { buildTimeline } from './timeline.js';
 import { createPanels } from './panels.js';
-import { JOURNEY_VH } from './journey.js';
+import { createAmbience, duckLevel } from './audio.js';
+import { JOURNEY_VH, journeyDistancePx } from './journey.js';
 
 function webglAvailable() {
   try {
@@ -46,7 +47,12 @@ async function boot() {
   const state = createState();
   const tier = detectTier();
   const models = await loadModels();
-  const app = initScene({ canvas: document.getElementById('scene'), state, tier, models });
+  const app = initScene({
+    canvas: document.getElementById('scene'),
+    state, tier, models,
+    onThunder: () => ambience.thunder(),
+    onDoor: () => ambience.creak(),
+  });
   document.body.classList.add('ready');
 
   // The document's height and the timeline's span must agree, or the
@@ -56,6 +62,16 @@ async function boot() {
 
   initScroll();
   buildTimeline(state);
+
+  // Duck the swamp once the beats arrive, so the track is not competing with
+  // crickets. Spanning the same fixed journey distance as the master
+  // timeline, so `progress` here means the same thing it does there.
+  ScrollTrigger.create({
+    trigger: '#scroll-track',
+    start: 'top top',
+    end: () => `+=${journeyDistancePx(window.innerHeight)}`,
+    onUpdate: (self) => ambience.setDuck(duckLevel(self.progress)),
+  });
 
   gsap.ticker.add(() => app.render());
 }
@@ -158,6 +174,46 @@ fillStaticPortfolio();
 // which never boot the 3D scene but still need the catalog and the bio.
 const panelRoot = document.querySelector('.panels');
 if (panelRoot) createPanels(panelRoot);
+
+// One ambience for the page, shared with the 3D scene so thunder can follow
+// its own lightning. Wired up outside boot() because the reduced-motion and
+// no-WebGL paths deserve the swamp too.
+const ambience = createAmbience();
+const soundBtn = document.getElementById('sound');
+
+function markSound(on) {
+  if (!soundBtn) return;
+  soundBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
+  soundBtn.setAttribute('aria-label', on ? 'turn ambient sound off' : 'turn ambient sound on');
+}
+
+// Every browser refuses to start audio until the visitor has interacted with
+// the page -- there is no way to truly autoplay, and a site that tried would
+// simply be silent. So it starts itself at the FIRST interaction of any
+// kind, including the first scroll, rather than waiting to be found in the
+// corner. The toggle remains for turning it back off.
+let soundArmed = true;
+async function startAmbience() {
+  if (!soundArmed || ambience.running) return;
+  soundArmed = false;
+  await ambience.start();
+  markSound(true);
+}
+for (const evt of ['pointerdown', 'keydown', 'wheel', 'touchstart', 'scroll']) {
+  window.addEventListener(evt, startAmbience, { once: true, passive: true });
+}
+
+soundBtn?.addEventListener('click', async (e) => {
+  e.stopPropagation();
+  if (ambience.running) {
+    ambience.stop();
+    soundArmed = false; // an explicit "off" must not be undone by the next scroll
+    markSound(false);
+  } else {
+    soundArmed = true;
+    await startAmbience();
+  }
+});
 
 if (prefersReduced) document.body.classList.add('reduced');
 

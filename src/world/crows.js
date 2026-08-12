@@ -6,6 +6,13 @@ import { crowPhase } from './events.js';
 // crowT sweeps 0->1. All motion derives from crowT, so scrubbing back
 // re-perches them.
 export function createCrows({ scene, gltf, roofline, count }) {
+  // One bird does not scatter. It sits on a stone by the road and turns its
+  // head to follow the camera, which is far more unsettling than the whole
+  // flock leaving -- and it is still there on the way back.
+  let watcher = null;
+  // ...and one crosses the moon, far off, on its own slow loop. Both are
+  // deliberately outside the scatter set below.
+  let distant = null;
   const crows = [];
   // The source GLB's own origin is NOT at the bird's feet — measured
   // empirically while lowering the perch onto the real roof (see
@@ -102,9 +109,38 @@ export function createCrows({ scene, gltf, roofline, count }) {
     crows.push({ obj, mixer, clipDuration, perch, escape });
   }
 
+  if (gltf) {
+    watcher = skeletonClone(gltf.scene);
+    const wb = new THREE.Box3().setFromObject(watcher);
+    const wsize = wb.getSize(new THREE.Vector3());
+    watcher.scale.setScalar(0.9 / Math.max(wsize.x, wsize.y, wsize.z));
+    watcher.position.set(3.1, 1.35, 18.4);
+    scene.add(watcher);
+
+    distant = skeletonClone(gltf.scene);
+    distant.scale.setScalar(0.9 / Math.max(wsize.x, wsize.y, wsize.z));
+    scene.add(distant);
+  }
+
   const tmp = new THREE.Vector3();
+  const headLook = new THREE.Vector3();
   return {
-    update(crowT, elapsed) {
+    update(crowT, elapsed, cameraPos) {
+      if (watcher && cameraPos) {
+        // Track the camera, but only in yaw: a bird swivelling on every axis
+        // reads as a broken puppet.
+        headLook.set(cameraPos.x, watcher.position.y, cameraPos.z);
+        watcher.lookAt(headLook);
+        watcher.position.y = 1.35 + Math.sin(elapsed * 1.6) * 0.02;
+      }
+      if (distant) {
+        // A long, slow pass across the sky near the moon.
+        const u = (elapsed * 0.035) % 1;
+        distant.position.set(-40 + u * 80, 26 - Math.sin(u * Math.PI) * 4, -30);
+        distant.rotation.y = Math.PI / 2;
+        distant.rotation.z = Math.sin(elapsed * 5) * 0.25;
+      }
+
       crows.forEach((c, i) => {
         const phase = crowPhase(crowT, i);
         if (phase <= 0) {

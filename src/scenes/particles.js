@@ -31,10 +31,23 @@ export function createFireflies(count) {
   const pos = new Float32Array(count * 3);
   const scale = new Float32Array(count);
   const phase = new Float32Array(count);
+  // Two thirds gather low over the marsh (z 13..47), where they read as
+  // sparks against dark water; the rest are scattered along the rest of the
+  // approach so the field is not empty. Evenly scattering them, as before,
+  // wasted most of them against ground they could not be seen over.
   for (let i = 0; i < count; i++) {
-    pos[i * 3] = (Math.random() - 0.5) * 22;      // x across the field
-    pos[i * 3 + 1] = 0.3 + Math.random() * 1.6;   // y: grass height band
-    pos[i * 3 + 2] = 6 + Math.random() * 38;      // z: along the approach
+    const overWater = i % 3 !== 0;
+    if (overWater) {
+      const a = Math.random() * Math.PI * 2;
+      const r = Math.sqrt(Math.random()) * 15;
+      pos[i * 3] = Math.cos(a) * r;
+      pos[i * 3 + 1] = 0.15 + Math.random() * 1.1;
+      pos[i * 3 + 2] = 30 + Math.sin(a) * r;
+    } else {
+      pos[i * 3] = (Math.random() - 0.5) * 22;
+      pos[i * 3 + 1] = 0.3 + Math.random() * 1.6;
+      pos[i * 3 + 2] = 4 + Math.random() * 40;
+    }
     scale[i] = 0.5 + Math.random();
     phase[i] = Math.random();
   }

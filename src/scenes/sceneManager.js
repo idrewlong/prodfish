@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { TIERS } from '../device.js';
 import { positionAt, targetAt } from '../world/path.js';
-import { buildWorld, NIGHT_SKY } from '../world/world.js';
+import { buildWorld, NIGHT_SKY, setWind } from '../world/world.js';
+import { createWeather } from '../world/weather.js';
 import { createCrows } from '../world/crows.js';
 import { createCandles } from '../world/candles.js';
 import { doorAngle } from '../world/events.js';
@@ -9,7 +10,7 @@ import { createFireflies } from './particles.js';
 import { createPost } from './post.js';
 import { buildMonuments } from '../world/monuments.js';
 
-export function initScene({ canvas, state, tier, models }) {
+export function initScene({ canvas, state, tier, models, onThunder, onDoor }) {
   const settings = TIERS[tier];
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, alpha: false });
   renderer.setClearColor(NIGHT_SKY, 1);
@@ -46,6 +47,8 @@ export function initScene({ canvas, state, tier, models }) {
 
   const fireflies = createFireflies(settings.particles);
   scene.add(fireflies);
+
+  const weather = createWeather(scene, { onThunder: () => onThunder?.() });
 
   const post = createPost(renderer, scene, camera);
 
@@ -119,6 +122,7 @@ export function initScene({ canvas, state, tier, models }) {
     renderer.dispose();
   });
 
+  let doorSounded = false;
   const clock = new THREE.Clock();
   const look = new THREE.Vector3();
   function render() {
@@ -134,7 +138,7 @@ export function initScene({ canvas, state, tier, models }) {
       camera.position.set(p[0], p[1], p[2]);
       camera.lookAt(lk[0], lk[1], lk[2]);
       scene.fog.density = state.fog;
-      crows.update(state.crowT, t);
+      crows.update(state.crowT, t, camera.position);
       candles.update(state.candleT, state.crossGlow, t);
       fireflies.material.uniforms.uTime.value = t;
       fireflies.material.uniforms.uOpacity.value = state.fireflies;
@@ -151,11 +155,44 @@ export function initScene({ canvas, state, tier, models }) {
     look.copy(targetAt(state.pathT, state.route));
     camera.lookAt(look);
 
+    // The door creak fires once, on the way open. Latched rather than
+    // threshold-tested every frame, so scrubbing back and forth does not
+    // machine-gun it -- but scrolling back past it does re-arm it.
+    if (state.doorT > 0.04 && !doorSounded) {
+      doorSounded = true;
+      onDoor?.();
+    } else if (state.doorT < 0.01) {
+      doorSounded = false;
+    }
     world.door.rotation.y = doorAngle(state.doorT);
     scene.fog.density = state.fog;
 
-    crows.update(state.crowT, t);
+    crows.update(state.crowT, t, camera.position);
     candles.update(state.candleT, state.crossGlow, t);
+
+    // Everything below moves on its own clock rather than the scrollbar's, so
+    // the scene keeps breathing while a visitor sits still and reads.
+    setWind(t);
+    weather.update(t);
+    if (world.mist) {
+      for (const bank of world.mist) {
+        // A slow lateral drift plus a gentle rise and fall; mist that only
+        // slid sideways read as a sheet on rails.
+        bank.mesh.position.x = bank.baseX + Math.sin(t * bank.drift + bank.phase) * 6;
+        bank.mesh.position.y += Math.sin(t * 0.21 + bank.phase) * 0.0008;
+      }
+    }
+    if (world.rose) {
+      // The light breathes: candlelight behind old glass, not an LED.
+      const flicker = 0.82 + 0.18 * Math.sin(t * 1.7) * Math.sin(t * 0.9 + 0.6);
+      world.rose.inner.intensity = 9 * flicker;
+      world.rose.rose.intensity = 5 * flicker;
+    }
+    if (world.water) {
+      // The sheet itself drifts a hair, so its highlights are never static.
+      world.water.material.map.offset.x = Math.sin(t * 0.035) * 0.02;
+      world.water.material.map.offset.y = t * 0.0016;
+    }
 
     fireflies.material.uniforms.uTime.value = t;
     fireflies.material.uniforms.uOpacity.value = state.fireflies;
