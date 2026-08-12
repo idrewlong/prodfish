@@ -9,18 +9,74 @@ export const TOTAL = 14;
 // camera passes close by) and the gradient falloff keeps that close pass
 // looking like a glow instead of a flat lit box.
 function makeGlowTexture() {
-  const size = 64;
-  const c = document.createElement('canvas');
-  c.width = c.height = size;
-  const ctx = c.getContext('2d');
+  // A round glow, used for the soft halo pooled around each flame.
+  const size = 128;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
   const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
-  g.addColorStop(0, 'rgba(255,255,255,1)');
-  g.addColorStop(0.4, 'rgba(255,200,140,0.6)');
-  g.addColorStop(1, 'rgba(255,150,60,0)');
+  g.addColorStop(0, 'rgba(255,214,150,0.85)');
+  g.addColorStop(0.45, 'rgba(255,150,54,0.28)');
+  g.addColorStop(1, 'rgba(255,120,30,0)');
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, size, size);
-  const tex = new THREE.CanvasTexture(c);
-  return tex;
+  return new THREE.CanvasTexture(canvas);
+}
+
+// The flame itself. A radial blob reads as a glowing dot; a real flame is a
+// teardrop with a white-hot base, a saturated orange body and a soft tip
+// that fades out. Drawn as stacked ellipses rather than one gradient so the
+// core stays tight while the tip stays wide and soft.
+function makeFlameTexture() {
+  const w = 96;
+  const h = 160;
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d');
+
+  // Outer body: broad, orange, fading at the tip.
+  const body = ctx.createRadialGradient(w / 2, h * 0.68, 2, w / 2, h * 0.62, w * 0.52);
+  body.addColorStop(0, 'rgba(255,170,60,0.95)');
+  body.addColorStop(0.55, 'rgba(255,120,26,0.42)');
+  body.addColorStop(1, 'rgba(255,90,15,0)');
+  ctx.fillStyle = body;
+  ctx.beginPath();
+  ctx.ellipse(w / 2, h * 0.64, w * 0.30, h * 0.34, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // The taper up to the tip.
+  const tip = ctx.createLinearGradient(0, h * 0.42, 0, 0);
+  tip.addColorStop(0, 'rgba(255,150,45,0.45)');
+  tip.addColorStop(1, 'rgba(255,110,20,0)');
+  ctx.fillStyle = tip;
+  ctx.beginPath();
+  ctx.moveTo(w * 0.5, 0);
+  ctx.quadraticCurveTo(w * 0.86, h * 0.34, w * 0.5, h * 0.5);
+  ctx.quadraticCurveTo(w * 0.14, h * 0.34, w * 0.5, 0);
+  ctx.fill();
+
+  // White-hot core just above the wick.
+  const core = ctx.createRadialGradient(w / 2, h * 0.74, 0, w / 2, h * 0.74, w * 0.17);
+  core.addColorStop(0, 'rgba(255,246,214,0.98)');
+  core.addColorStop(0.6, 'rgba(255,206,120,0.5)');
+  core.addColorStop(1, 'rgba(255,170,70,0)');
+  ctx.fillStyle = core;
+  ctx.beginPath();
+  ctx.ellipse(w / 2, h * 0.74, w * 0.13, h * 0.12, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // A dim blue base, where the flame is hottest and least luminous.
+  const base = ctx.createRadialGradient(w / 2, h * 0.85, 0, w / 2, h * 0.85, w * 0.12);
+  base.addColorStop(0, 'rgba(120,170,255,0.30)');
+  base.addColorStop(1, 'rgba(90,140,255,0)');
+  ctx.fillStyle = base;
+  ctx.beginPath();
+  ctx.ellipse(w / 2, h * 0.85, w * 0.10, h * 0.05, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  return new THREE.CanvasTexture(canvas);
 }
 
 // Candle z placement: first candle just inside the door, spaced back toward
@@ -34,11 +90,12 @@ export const CANDLE_Z_SPAN = 7.4;
 // altar. Flames are camera-facing additive sprites; a small pool of real
 // point lights follows the most recently lit candles so low tiers stay
 // cheap.
-export function createCandles({ scene, altarAnchor, crossGltf, maxLights }) {
+export function createCandles({ scene, altarAnchor, crossGltf, maxLights, onCandleLit }) {
   const candles = [];
   const glowTex = makeGlowTexture();
+  const flameTex = makeFlameTexture();
   const flameMat = new THREE.SpriteMaterial({
-    map: glowTex,
+    map: flameTex,
     color: '#ff9a3d',
     transparent: true,
     opacity: 0,
@@ -62,9 +119,18 @@ export function createCandles({ scene, altarAnchor, crossGltf, maxLights }) {
     // insistent glow now that ignition timing (see update()) actually keeps
     // them in view as they light.
     const flame = new THREE.Sprite(flameMat.clone());
-    flame.scale.set(0.3, 0.42, 1);
-    flame.position.y = 0.37;
-    const halo = new THREE.Sprite(flameMat.clone());
+    flame.material.color.set('#ffffff'); // the texture already carries the colour
+    flame.scale.set(0.17, 0.30, 1);
+    flame.position.y = 0.36;
+    const haloMat = new THREE.SpriteMaterial({
+      map: glowTex,
+      color: '#ff9a3d',
+      transparent: true,
+      opacity: 0,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    const halo = new THREE.Sprite(haloMat);
     halo.scale.set(0.95, 0.95, 1);
     halo.position.y = 0.37;
     g.add(wax, flame, halo);
@@ -123,17 +189,46 @@ export function createCandles({ scene, altarAnchor, crossGltf, maxLights }) {
     }));
   }
 
+  let lastLitCount = 0;
+
   return {
     TOTAL,
     update(candleT, crossGlow, elapsed) {
+      const litBefore = lastLitCount;
       const litIdx = [];
       candles.forEach((c, i) => {
         const k = candleIntensity(candleT, i, TOTAL);
-        c.flame.material.opacity = k;
-        c.flame.scale.y = 0.8 + 0.2 * Math.sin(elapsed * 11 + i * 2.1);
-        c.halo.material.opacity = k * 0.4;
+
+        // Each flame gets its own phase, so fourteen candles never pulse in
+        // unison -- which is what made them read as a row of lamps rather
+        // than as fire. Three incommensurate rates keep the flicker from
+        // settling into an obvious loop.
+        const ph = i * 2.399;
+        const fast = Math.sin(elapsed * 13.7 + ph);
+        const mid = Math.sin(elapsed * 6.1 + ph * 1.7);
+        const slow = Math.sin(elapsed * 2.3 + ph * 0.6);
+        const flick = 0.72 + 0.16 * fast + 0.08 * mid + 0.04 * slow;
+
+        c.flame.material.opacity = k * (0.82 + 0.18 * flick);
+        // A flame stretches as it draws up and squats as it gutters, and
+        // leans with the draught rather than standing perfectly plumb.
+        c.flame.scale.set(0.17 * (0.92 + 0.1 * mid), 0.30 * flick * 1.25, 1);
+        c.flame.position.x = 0.012 * slow + 0.006 * fast;
+        c.flame.position.y = 0.36 + 0.012 * flick;
+
+        // The halo answers to the flame, a beat behind, so the pool of light
+        // swells after the fire does.
+        c.halo.material.opacity = k * 0.34 * (0.7 + 0.3 * slow);
+        const haloS = 0.95 * (0.9 + 0.14 * slow);
+        c.halo.scale.set(haloS, haloS, 1);
+
         if (k > 0.15) litIdx.push(i);
       });
+      // Report each new catch exactly once, so a sound can follow it. Only
+      // counted upward: scrubbing back must not fire a burst of ignitions.
+      if (litIdx.length > litBefore) onCandleLit?.(litIdx.length - litBefore);
+      lastLitCount = litIdx.length;
+
       // Real lights track the last-lit candles (highest indices).
       lights.forEach((l, j) => {
         const idx = litIdx[litIdx.length - 1 - j];

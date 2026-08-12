@@ -10,7 +10,7 @@ import { createFireflies } from './particles.js';
 import { createPost } from './post.js';
 import { buildMonuments } from '../world/monuments.js';
 
-export function initScene({ canvas, state, tier, models, onThunder, onDoor }) {
+export function initScene({ canvas, state, tier, models, onThunder, onDoor, onCandle }) {
   const settings = TIERS[tier];
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, alpha: false });
   renderer.setClearColor(NIGHT_SKY, 1);
@@ -43,6 +43,7 @@ export function initScene({ canvas, state, tier, models, onThunder, onDoor }) {
     altarAnchor: world.altarAnchor,
     crossGltf: models.cross,
     maxLights: settings.candleLights,
+    onCandleLit: (n) => { for (let i = 0; i < n; i++) onCandle?.(); },
   });
 
   const fireflies = createFireflies(settings.particles);

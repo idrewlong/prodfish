@@ -39,34 +39,44 @@ export function createAmbience() {
   let userVolume = 0.7;
   let duck = 1;
 
-  function noiseBuffer(seconds) {
+  // Two noise colours, and which one is used matters more than it looks.
+  // Brown noise (integrated white) sits low and moves like air, which is
+  // right for wind and thunder. But it has almost no energy up where
+  // crickets and a dry hinge live, so pushing it through a narrow bandpass
+  // at 880Hz or 3.6kHz produced near-silence -- the reason the door creak
+  // and the crickets could not be heard at all.
+  function noiseBuffer(seconds, colour = 'white') {
     const len = Math.floor(ctx.sampleRate * seconds);
     const buf = ctx.createBuffer(1, len, ctx.sampleRate);
     const d = buf.getChannelData(0);
-    let last = 0;
-    for (let i = 0; i < len; i++) {
-      // Brown-ish noise: integrated white, which sits low and moves like air
-      // rather than hissing like static.
-      last = (last + Math.random() * 2 - 1) * 0.5;
-      d[i] = last;
+    if (colour === 'brown') {
+      let last = 0;
+      for (let i = 0; i < len; i++) {
+        last = (last + (Math.random() * 2 - 1) * 0.08) * 0.995;
+        d[i] = Math.max(-1, Math.min(1, last * 3.2));
+      }
+    } else {
+      for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
     }
     return buf;
   }
 
   function wind() {
     const src = ctx.createBufferSource();
-    src.buffer = noiseBuffer(6);
+    src.buffer = noiseBuffer(6, 'brown');
     src.loop = true;
     const filter = ctx.createBiquadFilter();
     filter.type = 'lowpass';
-    filter.frequency.value = 420;
+    filter.frequency.value = 320;
     const gain = ctx.createGain();
-    gain.gain.value = 0.14;
+    // Wind is a bed, not an event. At 0.14 it sat on top of the crickets,
+    // the creak and the candles instead of underneath them.
+    gain.gain.value = 0.045;
     // Slow swell, so the air is never at one level.
     const lfo = ctx.createOscillator();
     const lfoGain = ctx.createGain();
     lfo.frequency.value = 0.06;
-    lfoGain.gain.value = 0.06;
+    lfoGain.gain.value = 0.022;
     lfo.connect(lfoGain).connect(gain.gain);
     lfo.start();
     src.connect(filter).connect(gain).connect(master);
@@ -76,11 +86,11 @@ export function createAmbience() {
   function chirp(when) {
     // A cricket: a short band-passed noise burst, pitched high.
     const src = ctx.createBufferSource();
-    src.buffer = noiseBuffer(0.06);
+    src.buffer = noiseBuffer(0.06, 'white');
     const bp = ctx.createBiquadFilter();
     bp.type = 'bandpass';
     bp.frequency.value = 3600 + Math.random() * 1800;
-    bp.Q.value = 18;
+    bp.Q.value = 9;
     const g = ctx.createGain();
     g.gain.setValueAtTime(0.0001, when);
     g.gain.exponentialRampToValueAtTime(0.05 + Math.random() * 0.05, when + 0.008);
@@ -169,16 +179,18 @@ export function createAmbience() {
       if (!started) return;
       const now = ctx.currentTime;
       const src = ctx.createBufferSource();
-      src.buffer = noiseBuffer(1.6);
+      src.buffer = noiseBuffer(1.6, 'white');
       const bp = ctx.createBiquadFilter();
       bp.type = 'bandpass';
-      bp.Q.value = 22;
+      // Q was 22 -- so narrow that almost nothing survived it. A dry hinge
+      // is a broad, grinding band, not a sine.
+      bp.Q.value = 5;
       bp.frequency.setValueAtTime(880, now);
       bp.frequency.exponentialRampToValueAtTime(300, now + 1.25);
       const g = ctx.createGain();
       g.gain.setValueAtTime(0.0001, now);
-      g.gain.exponentialRampToValueAtTime(0.24, now + 0.18);
-      g.gain.exponentialRampToValueAtTime(0.06, now + 0.9);
+      g.gain.exponentialRampToValueAtTime(0.42, now + 0.18);
+      g.gain.exponentialRampToValueAtTime(0.12, now + 0.9);
       g.gain.exponentialRampToValueAtTime(0.0001, now + 1.4);
       src.connect(bp).connect(g).connect(master);
       src.start(now);
@@ -197,12 +209,46 @@ export function createAmbience() {
       knock.stop(now + 1.55);
     },
 
+    // A candle catching: a short breath of white noise, high and soft, with
+    // a tiny warm thump underneath. Called once per candle as it lights, so
+    // it has to be quiet enough to hear fourteen of them in a row.
+    candle() {
+      if (!started) return;
+      const now = ctx.currentTime;
+      const src = ctx.createBufferSource();
+      src.buffer = noiseBuffer(0.4, 'white');
+      const hp = ctx.createBiquadFilter();
+      hp.type = 'bandpass';
+      hp.frequency.setValueAtTime(2600, now);
+      hp.frequency.exponentialRampToValueAtTime(900, now + 0.3);
+      hp.Q.value = 1.4;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, now);
+      g.gain.exponentialRampToValueAtTime(0.07, now + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + 0.34);
+      src.connect(hp).connect(g).connect(master);
+      src.start(now);
+      src.stop(now + 0.42);
+
+      const thump = ctx.createOscillator();
+      thump.type = 'sine';
+      thump.frequency.setValueAtTime(190, now);
+      thump.frequency.exponentialRampToValueAtTime(90, now + 0.12);
+      const tg = ctx.createGain();
+      tg.gain.setValueAtTime(0.0001, now);
+      tg.gain.exponentialRampToValueAtTime(0.05, now + 0.015);
+      tg.gain.exponentialRampToValueAtTime(0.0001, now + 0.16);
+      thump.connect(tg).connect(master);
+      thump.start(now);
+      thump.stop(now + 0.2);
+    },
+
     // Thunder is called by the weather, so the rumble follows its own flash.
     thunder() {
       if (!started) return;
       const now = ctx.currentTime;
       const src = ctx.createBufferSource();
-      src.buffer = noiseBuffer(3.5);
+      src.buffer = noiseBuffer(3.5, 'brown');
       const lp = ctx.createBiquadFilter();
       lp.type = 'lowpass';
       lp.frequency.setValueAtTime(220, now);

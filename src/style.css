@@ -421,23 +421,36 @@ body.ready #loading { opacity: 0; pointer-events: none; }
 #sound .sound-mark { font-size: 0.85rem; line-height: 1; }
 @media (max-width: 640px) { #sound .sound-word { display: none; } }
 
-/* Volume sits under the toggle and only appears once sound is on: a slider
-   for something that is not playing is just clutter. */
-#volume {
+/* Volume sits above the toggle with real breathing room -- at 3.4rem it
+   crowded the button and read as one control. The minus and plus ends say
+   which way is quieter without needing a label. */
+#volume-row {
   position: fixed;
   right: 1.1rem;
-  bottom: 3.4rem;
+  bottom: 4.6rem;
   z-index: 7;
-  width: 6.4rem;
-  height: 2px;
-  appearance: none;
-  background: rgba(216, 211, 200, 0.25);
-  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.35s ease;
 }
-body.sound-on #volume { opacity: 1; pointer-events: auto; }
+body.sound-on #volume-row { opacity: 1; pointer-events: auto; }
+.vol-end {
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  line-height: 1;
+  color: rgba(216, 211, 200, 0.45);
+  user-select: none;
+}
+#volume {
+  width: 5.6rem;
+  height: 2px;
+  appearance: none;
+  background: rgba(216, 211, 200, 0.25);
+  cursor: pointer;
+}
 #volume::-webkit-slider-thumb {
   appearance: none;
   width: 11px;
@@ -454,4 +467,3 @@ body.sound-on #volume { opacity: 1; pointer-events: auto; }
   background: var(--bone);
 }
 #volume:focus-visible { outline: 1px solid var(--blood); outline-offset: 5px; }
-.reduced #volume, .no-webgl #volume { position: fixed; }

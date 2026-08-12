@@ -18,8 +18,12 @@
   <button id="sound" type="button" aria-pressed="false" aria-label="turn ambient sound on">
     <span class="sound-mark" aria-hidden="true">&#9834;</span><span class="sound-word">sound</span>
   </button>
-  <input id="volume" type="range" min="0" max="100" value="70"
-         aria-label="ambient sound volume" />
+  <div id="volume-row">
+    <span class="vol-end vol-low" aria-hidden="true">&minus;</span>
+    <input id="volume" type="range" min="0" max="100" value="70"
+           aria-label="ambient sound volume" />
+    <span class="vol-end vol-high" aria-hidden="true">&plus;</span>
+  </div>
 
   <header id="hero">
     <h1>fish</h1>

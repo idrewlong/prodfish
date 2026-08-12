@@ -52,6 +52,7 @@ async function boot() {
     state, tier, models,
     onThunder: () => ambience.thunder(),
     onDoor: () => ambience.creak(),
+    onCandle: () => ambience.candle(),
   });
   document.body.classList.add('ready');
 
@@ -195,7 +196,7 @@ if (volumeSlider) {
   volumeSlider.addEventListener('input', () => ambience.setVolume(volumeSlider.value / 100));
   // Dragging the slider must not also count as the "first interaction" that
   // starts the sound, or grabbing it would fire audio before it is aimed.
-  volumeSlider.addEventListener('pointerdown', (e) => e.stopPropagation());
+  document.getElementById('volume-row')?.addEventListener('pointerdown', (e) => e.stopPropagation());
 }
 
 // Every browser refuses to start audio until the visitor has interacted with
