@@ -64,19 +64,44 @@ export function createPanels(root) {
 
   // Swipe. Only horizontal drags are claimed — a vertical one is the
   // visitor scrolling the page, and stealing it would trap them here.
+  //
+  // The gesture is tracked per pointer id and cleared on pointercancel.
+  // Without that, Safari's habit of claiming an ambiguous drag as a page
+  // scroll (which fires pointercancel, never pointerup) left startX set
+  // forever, so the NEXT unrelated tap measured its dx against a stale
+  // origin from a gesture that had already been abandoned — occasionally
+  // flipping the panel when someone was only trying to tap a link.
   let startX = null;
   let startY = null;
-  viewport?.addEventListener('pointerdown', (e) => { startX = e.clientX; startY = e.clientY; });
+  let pointerId = null;
+
+  const endGesture = () => {
+    startX = null;
+    startY = null;
+    pointerId = null;
+  };
+
+  viewport?.addEventListener('pointerdown', (e) => {
+    // A second finger during a drag is a pinch, not a swipe.
+    if (pointerId !== null) return endGesture();
+    pointerId = e.pointerId;
+    startX = e.clientX;
+    startY = e.clientY;
+  });
+
   viewport?.addEventListener('pointerup', (e) => {
-    if (startX === null) return;
+    if (startX === null || e.pointerId !== pointerId) return;
     const dx = e.clientX - startX;
     const dy = e.clientY - startY;
+    endGesture();
     if (Math.abs(dx) > Math.abs(dy)) {
       go(panelAfterDrag(current, dx, viewport.clientWidth, panels.length));
     }
-    startX = null;
-    startY = null;
   });
+
+  viewport?.addEventListener('pointercancel', endGesture);
+  // Dragging out of the carousel entirely is an abandoned gesture too.
+  viewport?.addEventListener('pointerleave', endGesture);
 
   go(0);
   return { go };

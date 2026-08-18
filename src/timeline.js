@@ -2,7 +2,7 @@ import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { ACTS } from './choreography.js';
 import { tNearest, LANDMARKS } from './world/path.js';
-import { journeyDistancePx } from './journey.js';
+import { journeyDistancePx, viewportBasis } from './journey.js';
 
 // Candle ignition window (scroll fraction the candleT tween below runs
 // over). candleIntensity() in world/events.js turns candleT into a
@@ -61,12 +61,20 @@ export function buildTimeline(state) {
       // `bottom bottom` would squeeze the entire timeline -- church, altar
       // and embed -- into those few screens. A fixed distance instead means
       // a short document simply runs out partway, parking the camera at the
-      // fork. Function form so it re-measures on refresh/resize.
-      end: () => `+=${journeyDistancePx(window.innerHeight)}`,
+      // fork. Function form so it re-measures on refresh -- but off the
+      // FROZEN viewport basis (see journey.js), not the live innerHeight, so
+      // iOS Safari's toolbar collapsing mid-scroll cannot re-scale the
+      // journey underneath the visitor.
+      end: () => `+=${journeyDistancePx(viewportBasis(window.innerHeight))}`,
       // fix-round: 1.2 -> 2 -- extra scrub lag smooths out residual scroll
       // jitter now that the approach pathT tween below is a single gentle
       // ease instead of two tweens with an accelerating tail.
       scrub: 2,
+      // Mobile browsers fire `resize` every time the address bar slides in or
+      // out. Without this, ScrollTrigger recalculates start/end mid-journey
+      // and the camera jumps. Real rotations still refresh -- see the
+      // orientationchange handler in main.js.
+      ignoreMobileResize: true,
     },
   });
 

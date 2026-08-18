@@ -18,6 +18,29 @@ verbatim (from each model's downloaded `license.txt`):
 > Alexei Ostapenko (https://sketchfab.com/alexanders823) licensed under
 > CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
 
+## ⚠ Pending attribution — supplied 2026-08-17, licence not yet recorded
+
+These four were added to the scene and are shipping in `public/models/`, but
+their source and licence are not known here. **If any is CC-BY, this file must
+name the author and link the original before the site goes out** — the same
+obligation already met for the church and crow above. If any is CC0 or
+otherwise unrestricted, say so and this block can simply be deleted.
+
+- **`oak.glb`** — the live oaks along the approach (was `oak_tree.glb`).
+  Arrived using `KHR_materials_pbrSpecularGlossiness`, which is characteristic
+  of an older Sketchfab upload.
+- **`truck.glb`** — the abandoned truck (was
+  `rusty_old_truck_free_raw_scan.glb`). Material named `1930sGMCtruck`; the
+  filename says "free raw scan", which usually means a photogrammetry capture
+  published under CC-BY.
+- **`zombie.glb`** — the watchers standing in the treeline.
+- **`mossy-stone.glb`** — the scattered boulders (was `stone_with_moss.glb`).
+  Material named `kivi` (Finnish for "stone").
+
+Raw sources are in `assets/source/<name>/` (gitignored). If any of them came
+with a `license.txt`, drop it in beside the model and the wording can be
+reproduced verbatim, as was done for the church and crow.
+
 ## AI-generated / supplied assets
 
 The following models were generated with Higgsfield (image-to-3D) for this

@@ -1,6 +1,8 @@
 export const TIERS = {
-  low:  { particles: 60,  dprCap: 1.5, candleLights: 2, crows: 3, grass: 350 },
-  high: { particles: 140, dprCap: 2,   candleLights: 6, crows: 5, grass: 1000 },
+  // grass is a TUFT count, not a blade count: each tuft is 3 blades on low
+  // and 6 on high, so high tier draws ~12k blades across 2000 clumps.
+  low:  { particles: 60,  dprCap: 1.5, candleLights: 2, crows: 3, grass: 700 },
+  high: { particles: 140, dprCap: 2,   candleLights: 6, crows: 5, grass: 2000 },
 };
 
 export function deviceTier({ isMobileUA = false, memory, cores } = {}) {
@@ -10,9 +12,19 @@ export function deviceTier({ isMobileUA = false, memory, cores } = {}) {
   return 'high';
 }
 
+// iPadOS Safari reports a DESKTOP user agent ("Macintosh"), so the UA test
+// alone silently handed every iPad the high tier — 1000 grass tufts, six
+// candle lights and a 2x pixel ratio on a tablet GPU. A Mac that reports more
+// than one touch point is, in practice, an iPad.
+export function isTouchTablet({ userAgent = '', maxTouchPoints = 0 } = {}) {
+  return /Macintosh/i.test(userAgent) && maxTouchPoints > 1;
+}
+
 export function detectTier() {
+  const ua = navigator.userAgent;
   return deviceTier({
-    isMobileUA: /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent),
+    isMobileUA: /Mobi|Android|iPhone|iPad/i.test(ua)
+      || isTouchTablet({ userAgent: ua, maxTouchPoints: navigator.maxTouchPoints }),
     memory: navigator.deviceMemory,
     cores: navigator.hardwareConcurrency,
   });

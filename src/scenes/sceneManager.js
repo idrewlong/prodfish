@@ -17,7 +17,13 @@ export function initScene({
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, alpha: false });
   renderer.setClearColor(NIGHT_SKY, 1);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, settings.dprCap));
-  renderer.setSize(window.innerWidth, window.innerHeight);
+  // `false` = do not write inline width/height onto the canvas element. The
+  // canvas is `position: fixed; inset: 0` in CSS, so it always covers the
+  // live viewport; only the DRAWING BUFFER is sized here. On iOS this is what
+  // stops a strip of page background showing along the bottom edge for the
+  // duration of every toolbar collapse — the canvas keeps covering, and the
+  // buffer catches up a frame later instead of the element itself resizing.
+  renderer.setSize(window.innerWidth, window.innerHeight, false);
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   // task-12: previously boosted to 2.3 while fighting a missing gamma-encode
   // bug in the post-processing final pass (see post.js) that made every
@@ -95,7 +101,7 @@ export function initScene({
   window.addEventListener('resize', () => {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setSize(window.innerWidth, window.innerHeight, false);
     post.composer.setSize(window.innerWidth, window.innerHeight);
     // renderer.setSize() clears the framebuffer. In normal mode the ticker
     // repaints on the very next frame anyway (harmless extra render here),
@@ -180,10 +186,16 @@ export function initScene({
       world.rose.inner.intensity = 9 * flicker;
       world.rose.rose.intensity = 5 * flicker;
     }
-    if (world.water) {
-      // The sheet itself drifts a hair, so its highlights are never static.
-      world.water.material.map.offset.x = Math.sin(t * 0.035) * 0.02;
-      world.water.material.map.offset.y = t * 0.0016;
+    if (world.water?.length) {
+      // The surface itself now waves in the vertex shader off the shared wind
+      // clock (see applyWaterMotion in world.js); this only drifts the scum
+      // and duckweed across it, which the wave alone cannot do. The pools
+      // share one texture, so this is set once rather than per pool.
+      const map = world.water[0].material.map;
+      if (map) {
+        map.offset.x = Math.sin(t * 0.035) * 0.02;
+        map.offset.y = t * 0.0016;
+      }
     }
 
     fireflies.material.uniforms.uTime.value = t;

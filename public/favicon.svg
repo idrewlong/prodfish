@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- A fish, cut as a silhouette rather than set in type: the blackletter
+       "fish" wordmark is illegible at 16px, and the site's own font cannot be
+       relied on inside an icon that must render before any font loads. -->
+  <rect width="64" height="64" fill="#050607"/>
+  <g fill="#c1170f">
+    <path d="M44 32c0 6.5-7.6 13-17 13S10 38.5 10 32s7.6-13 17-13 17 6.5 17 13z"/>
+    <path d="M45 32l9-9v18l-9-9z"/>
+  </g>
+  <circle cx="20" cy="28.5" r="2.2" fill="#d8d3c8"/>
+</svg>

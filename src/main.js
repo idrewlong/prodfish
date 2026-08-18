@@ -10,7 +10,7 @@ import { initScroll } from './scroll.js';
 import { buildTimeline } from './timeline.js';
 import { createPanels } from './panels.js';
 import { createAmbience, duckLevel } from './audio.js';
-import { JOURNEY_VH, journeyDistancePx } from './journey.js';
+import { journeyDistancePx, journeyTrackPx, viewportBasis, resetViewportBasis } from './journey.js';
 
 function webglAvailable() {
   try {
@@ -23,23 +23,35 @@ function webglAvailable() {
 
 const prefersReduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+// Paints the loading screen's progress bar. Kept separate from the loader so
+// the reduced-motion and debug paths get the same feedback for free.
+function showProgress(fraction) {
+  const bar = document.querySelector('#loading .load-bar-fill');
+  if (bar) bar.style.transform = `scaleX(${Math.max(0, Math.min(1, fraction))})`;
+}
+
 async function loadModels() {
-  const load = createAssetLoader();
-  const [church, crow, cross, gravestoneA, gravestoneB, treeA, treeB, stones, bike] = await Promise.all([
-    load.required('/models/church.glb').catch((e) => {
-      console.error('chapel failed to load', e);
-      return null; // world.js builds a shell; loading screen still clears
-    }),
-    load.optional('/models/crow.glb'),
-    load.optional('/models/cross.glb'),
-    load.optional('/models/gravestone-a.glb'),
-    load.optional('/models/gravestone-b.glb'),
-    load.optional('/models/tree-a.glb'),
-    load.optional('/models/tree-b.glb'),
-    load.optional('/models/grave-stones.glb'),
-    load.optional('/models/motorcycle.glb'),
-  ]);
-  return { church, crow, cross, gravestoneA, gravestoneB, treeA, treeB, stones, bike };
+  const load = createAssetLoader({ onProgress: showProgress });
+  // Not fetched any more, though still present in public/models if wanted
+  // back: tree-a/tree-b (replaced by oak.glb) and motorcycle (replaced by
+  // truck.glb) — 834KB of downloads retired.
+  const [church, crow, cross, gravestoneA, gravestoneB, stones, oak, truck, watcher, boulder] =
+    await Promise.all([
+      load.required('/models/church.glb').catch((e) => {
+        console.error('chapel failed to load', e);
+        return null; // world.js builds a shell; loading screen still clears
+      }),
+      load.optional('/models/crow.glb'),
+      load.optional('/models/cross.glb'),
+      load.optional('/models/gravestone-a.glb'),
+      load.optional('/models/gravestone-b.glb'),
+      load.optional('/models/grave-stones.glb'),
+      load.optional('/models/oak.glb'),
+      load.optional('/models/truck.glb'),
+      load.optional('/models/zombie.glb'),
+      load.optional('/models/mossy-stone.glb'),
+    ]);
+  return { church, crow, cross, gravestoneA, gravestoneB, stones, oak, truck, watcher, boulder };
 }
 
 
@@ -53,14 +65,38 @@ async function boot() {
     onThunder: () => ambience.thunder(),
   });
   document.body.classList.add('ready');
+  // Freeze the journey's basis before anything measures against it, so the
+  // track height, the master timeline and the audio duck all span the same
+  // number of pixels.
+  viewportBasis(window.innerHeight);
 
-  // The document's height and the timeline's span must agree, or the
-  // journey either runs out early or never finishes. JOURNEY_VH is the one
-  // source of truth; the CSS value is only a sensible pre-boot default.
-  document.getElementById('scroll-track').style.height = `${JOURNEY_VH}vh`;
+  // The document's height and the timeline's span must agree, or the journey
+  // either runs out early or never finishes. Both now come from the same
+  // frozen pixel basis (see journey.js) rather than one being `vh` and the
+  // other `innerHeight` -- units that are equal on desktop and differ by the
+  // toolbar's height on iOS Safari.
+  const track = document.getElementById('scroll-track');
+  const sizeTrack = () => {
+    track.style.height = `${journeyTrackPx(viewportBasis(window.innerHeight))}px`;
+  };
+  sizeTrack();
 
-  initScroll();
+  const lenis = initScroll();
   buildTimeline(state);
+  wireSkip(lenis, sizeTrack);
+
+  // A rotation is a real layout change, unlike the toolbar wobble that
+  // ignoreMobileResize (see timeline.js) deliberately swallows -- so it, and
+  // only it, re-measures the basis and rebuilds the journey's geometry.
+  window.addEventListener('orientationchange', () => {
+    // The viewport reports its old size until after the rotation settles.
+    setTimeout(() => {
+      resetViewportBasis();
+      viewportBasis(window.innerHeight);
+      sizeTrack();
+      ScrollTrigger.refresh();
+    }, 250);
+  });
 
   // Duck the swamp once the beats arrive, so the track is not competing with
   // crickets. Spanning the same fixed journey distance as the master
@@ -68,11 +104,39 @@ async function boot() {
   ScrollTrigger.create({
     trigger: '#scroll-track',
     start: 'top top',
-    end: () => `+=${journeyDistancePx(window.innerHeight)}`,
-    onUpdate: (self) => ambience.setDuck(duckLevel(self.progress)),
+    end: () => `+=${journeyDistancePx(viewportBasis(window.innerHeight))}`,
+    ignoreMobileResize: true,
+    onUpdate: (self) => {
+      ambience.setDuck(duckLevel(self.progress));
+      // Once the altar is reached the skip control has nothing left to skip.
+      document.body.classList.toggle('arrived', self.progress > 0.95);
+    },
   });
 
-  gsap.ticker.add(() => app.render());
+  // Compositing a 3D scene into a tab nobody is looking at is pure battery
+  // drain. Browsers throttle rAF in background tabs but do not reliably stop
+  // it, and on a phone this is the difference between atmospheric and hostile.
+  let visible = !document.hidden;
+  document.addEventListener('visibilitychange', () => { visible = !document.hidden; });
+  gsap.ticker.add(() => { if (visible) app.render(); });
+}
+
+// The skip control is a real <a href="#chapel">, so it works with no JS and
+// on the static paths. Here it is upgraded to a smooth Lenis jump, because
+// a native anchor jump would teleport the scrubbed camera the entire length
+// of the journey in one frame.
+function wireSkip(lenis, sizeTrack) {
+  const skip = document.getElementById('skip');
+  if (!skip) return;
+  skip.addEventListener('click', (e) => {
+    e.preventDefault();
+    // Deliberately NOT stopPropagation: this is a real gesture and letting it
+    // reach the window unlocks the ambience, same as any other first tap.
+    sizeTrack();
+    // documentElement, not body: the track's height lives on a child of
+    // <html>, and body.scrollHeight does not always reflect it.
+    lenis.scrollTo(document.documentElement.scrollHeight, { duration: 2.2, lock: true });
+  });
 }
 
 // Reduced motion: one static framed view of the approach, no scroll scrub.
@@ -199,28 +263,55 @@ if (volumeSlider) {
 
 // Every browser refuses to start audio until the visitor has interacted with
 // the page -- there is no way to truly autoplay, and a site that tried would
-// simply be silent. So it starts itself at the FIRST interaction of any
-// kind, including the first scroll, rather than waiting to be found in the
-// corner. The toggle remains for turning it back off.
+// simply be silent. So it starts itself at the first interaction that
+// actually counts as one, rather than waiting to be found in the corner. The
+// toggle remains for turning it back off.
+//
+// `touchstart` and `scroll` used to be on this list and are deliberately not
+// any more: WebKit does not accept either as a user gesture, so on iOS the
+// first scroll built a permanently-suspended AudioContext, burned the
+// one-shot listener, and left the toggle claiming sound was on. `touchend` is
+// the touch event WebKit does accept.
+const UNLOCK_EVENTS = ['pointerdown', 'touchend', 'click', 'keydown', 'wheel'];
 let soundArmed = true;
+let soundStarting = false;
+
+function onUnlock() { startAmbience(); }
+
+function listenForUnlock(on) {
+  for (const evt of UNLOCK_EVENTS) {
+    if (on) window.addEventListener(evt, onUnlock, { passive: true });
+    else window.removeEventListener(evt, onUnlock);
+  }
+}
+
 async function startAmbience() {
-  if (!soundArmed || ambience.running) return;
-  soundArmed = false;
-  await ambience.start();
+  if (!soundArmed || soundStarting || ambience.running) return false;
+  soundStarting = true;
+  const running = await ambience.start();
+  soundStarting = false;
+  // A refused start leaves us armed and still listening. Unlike the previous
+  // `{ once: true }` wiring, one attempt from a non-gesture cannot burn the
+  // page's only chance to ever produce sound.
+  if (!running) return false;
   markSound(true);
+  listenForUnlock(false);
+  return true;
 }
-for (const evt of ['pointerdown', 'keydown', 'wheel', 'touchstart', 'scroll']) {
-  window.addEventListener(evt, startAmbience, { once: true, passive: true });
-}
+
+listenForUnlock(true);
 
 soundBtn?.addEventListener('click', async (e) => {
   e.stopPropagation();
   if (ambience.running) {
     ambience.stop();
-    soundArmed = false; // an explicit "off" must not be undone by the next scroll
+    soundArmed = false; // an explicit "off" must not be undone by the next gesture
+    listenForUnlock(false);
     markSound(false);
   } else {
     soundArmed = true;
+    // A click is a gesture in every browser, so this path always succeeds
+    // where the ambient unlock above may legitimately have been refused.
     await startAmbience();
   }
 });

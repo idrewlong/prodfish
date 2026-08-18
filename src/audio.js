@@ -132,12 +132,33 @@ export function createAmbience() {
   return {
     get running() { return started; },
 
+    // Resolves true only if audio is genuinely running. Callers must not
+    // report "sound on" off a bare call to this -- see the suspended-context
+    // case below.
     async start() {
-      if (started) return;
+      if (started) return true;
       const Ctx = window.AudioContext || window.webkitAudioContext;
-      if (!Ctx) return;
+      if (!Ctx) return false;
+      // iOS gives a WebAudio-only page the "ambient" audio session, which the
+      // hardware silent switch mutes outright -- so the ambience could be
+      // correctly unlocked and still completely inaudible for anyone with
+      // their ringer off, which is most people. Declaring playback moves it
+      // to the media channel, which the silent switch does not touch.
+      try {
+        if (navigator.audioSession) navigator.audioSession.type = 'playback';
+      } catch { /* not supported: fall through, silent switch still applies */ }
       ctx = new Ctx();
       await ctx.resume();
+      // WebKit only truly starts a context inside a real user gesture, and
+      // its list of those is narrow (touchend/click/keydown -- NOT touchstart
+      // and NOT scroll). From anywhere else resume() resolves normally and
+      // leaves the context suspended. Trusting it was what made the toggle
+      // read "on" over a silent page, and cost three taps to actually play.
+      if (ctx.state !== 'running') {
+        await ctx.close().catch(() => {});
+        ctx = null;
+        return false;
+      }
       master = ctx.createGain();
       master.gain.value = 0;
       master.connect(ctx.destination);
@@ -146,6 +167,7 @@ export function createAmbience() {
       // Fade up, so it arrives rather than switches on.
       master.gain.linearRampToValueAtTime(mixGain(userVolume, duck), ctx.currentTime + 2.5);
       started = true;
+      return true;
     },
 
     stop() {

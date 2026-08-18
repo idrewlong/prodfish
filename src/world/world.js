@@ -1,6 +1,10 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { positionAt, T_DOOR } from './path.js';
+import { buildMossCurtains, applyBranchSway } from './trees.js';
+import { windUniforms, setWind, WIND_DIR } from './wind.js';
+
+export { setWind };
 
 // Night sky/fog tone, shared with sceneManager.js. Deliberately NOT applied
 // through ACES Filmic tone mapping for the sky dome below: at the exposure
@@ -31,10 +35,16 @@ export const PROP_SPOTS = {
     [6.6, 22.5, -0.1, 0.85], [-6.2, 19, 0.4, 1], [6.0, 15.5, -0.5, 0.95],
     [-5.6, 10.5, 0.3, 1], [5.9, 7.5, -0.4, 0.9],
   ],
+  // Nudged outward when the trees became live oaks. The old AI-generated
+  // trees were ~4.5m across at this height; the oak is ~6.9m, so spots that
+  // used to read as "tree behind a headstone" became a trunk standing on top
+  // of one -- worst on the right at 1.39m and 1.58m. Every tree now keeps
+  // 2.7m from the nearest marker, which took at most 1.4m of movement, so the
+  // avenue's shape is unchanged. Path clearance only went up.
   trees: [
-    [-6.5, 38, 0, 1.1], [7, 33, 1.2, 1], [-7.5, 26, 2.1, 0.9],
-    [6.8, 20, 0.4, 1.2], [-6.2, 13, 2.8, 1], [7.2, 8, 1.7, 0.95],
-    [7.8, 43, 0.9, 1], [-8.0, 30, 1.5, 0.95], [7.5, 16, 2.3, 1.05], [-6.8, 5.5, 0.6, 0.9],
+    [-6.5, 38, 0, 1.1], [7, 33, 1.2, 1], [-8.5, 26, 2.1, 0.9],
+    [6.2, 19.8, 0.4, 1.2], [-6.1, 13.2, 2.8, 1], [8.6, 8, 1.7, 0.95],
+    [7.8, 43, 0.9, 1], [-8.0, 30, 1.5, 0.95], [8.7, 16, 2.3, 1.05], [-6.8, 5.5, 0.6, 0.9],
   ],
 };
 
@@ -211,69 +221,151 @@ function makeLcg(seed) {
   };
 }
 
-// One instanced "cross quad" tuft geometry: two vertical planes intersecting
-// at right angles through the Y axis, base pinned at y=0. Cheaper than a
-// billboard sprite per tuft (no per-frame camera-facing math) while still
-// reading as volumetric grass from most viewing angles.
-function buildGrassBladeGeometry() {
-  const w = 0.5;
-  const h = 0.7;
-  const positions = new Float32Array([
-    -w / 2, 0, 0, w / 2, 0, 0, w / 2, h, 0, -w / 2, h, 0,
-    0, 0, -w / 2, 0, 0, w / 2, 0, h, w / 2, 0, h, -w / 2,
-  ]);
-  const uvs = new Float32Array([0, 0, 1, 0, 1, 1, 0, 1, 0, 0, 1, 0, 1, 1, 0, 1]);
-  const index = [0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7];
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-  geo.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
-  geo.setIndex(index);
-  geo.computeVertexNormals();
-  return geo;
-}
+// One instanced TUFT: a handful of individually modelled blades sharing a
+// root, base pinned at y=0.
+//
+// This replaces a pair of crossed quads carrying a 32px canvas texture of
+// painted-on blades. Four things were wrong with that, and all four are the
+// same class of problem — the grass was a picture of grass rather than
+// grass:
+//   - the silhouette was a RECTANGLE. Whatever the texture painted, the
+//     shape the eye tracked against the fog was a hard-edged box, and at
+//     32px the alpha cutout's edges were visibly stair-stepped.
+//   - it used MeshBasicMaterial, which is UNLIT. The field did not react to
+//     the moon, the door glow or the lightning at all, so it read as a flat
+//     decal pasted over a lit scene — the single biggest tell.
+//   - every tuft was the same two quads at a different yaw, so the field
+//     had one silhouette repeated a thousand times.
+//   - alphaTest forces the GPU to give up early-Z. Real tapered geometry is
+//     opaque, so this is also CHEAPER per pixel despite having more
+//     triangles, which is the trade that matters on a phone.
+//
+// Blades taper to a point, lean off the root, and curve over under their own
+// weight, with per-blade colour from root to tip. No texture, no transparency.
+export function buildTuftGeometry({
+  blades = 5,
+  segments = 5,
+  height = 0.7,
+  width = 0.045,
+  curve = 0.35,
+  spread = 0.06,
+  rootColor = '#2a3020',
+  tipColor = '#7c8560',
+  seed = 0x1234abcd,
+} = {}) {
+  const rand = makeLcg(seed);
+  const root = new THREE.Color(rootColor);
+  const tip = new THREE.Color(tipColor);
 
-// Procedural canvas texture of a few grass blades, desaturated gray-green to
-// match the near-dead Ghost-Rider-graveyard field rather than healthy lawn.
-function makeGrassTexture() {
-  const size = 32;
-  const c = document.createElement('canvas');
-  c.width = c.height = size;
-  const ctx = c.getContext('2d');
-  ctx.clearRect(0, 0, size, size);
-  const shades = ['#2a2f22', '#333a28', '#242a1c', '#3a4130'];
-  for (let i = 0; i < 7; i++) {
-    const bx = ((i + 0.5) / 7) * size + Math.sin(i * 3.1) * 2.5;
-    ctx.strokeStyle = shades[i % shades.length];
-    ctx.lineWidth = 1.6;
-    ctx.beginPath();
-    ctx.moveTo(bx, size);
-    ctx.quadraticCurveTo(bx + Math.sin(i) * 3, size * 0.5, bx + Math.sin(i * 1.7) * 4, 1);
-    ctx.stroke();
+  const positions = [];
+  const normals = [];
+  const colors = [];
+  const heights = []; // 0..1 up the blade, drives the wind bend
+  const phases = [];  // per-blade, so blades in one tuft never move in lockstep
+  const index = [];
+
+  for (let b = 0; b < blades; b++) {
+    // Splay the blades around the root rather than stacking them on one axis.
+    const yaw = (b / blades) * Math.PI * 2 + rand() * 0.9;
+    const dirX = Math.cos(yaw);
+    const dirZ = Math.sin(yaw);
+    // `height` is a true CEILING, not a nominal value: buildGrass multiplies
+    // it by a per-instance vertical scale, and the blades' own variation must
+    // not push a tuft past the height its caller asked for. Raggedness across
+    // the field comes from that instance scale; this is only the raggedness
+    // WITHIN one clump.
+    const h = height * (0.6 + rand() * 0.4);
+    const lean = curve * (0.4 + rand() * 1.2);
+    const w = width * (0.7 + rand() * 0.7);
+    const baseX = dirX * spread * rand();
+    const baseZ = dirZ * spread * rand();
+    const phase = rand() * Math.PI * 2;
+    // Dead grass is not one colour: some blades are further gone than others.
+    const dryness = 0.75 + rand() * 0.5;
+
+    const first = positions.length / 3;
+    for (let s = 0; s <= segments; s++) {
+      const v = s / segments;
+      // Taper to an actual point. The exponent keeps the blade full for most
+      // of its length and narrows sharply near the tip, like a real leaf.
+      const halfW = (w * (1 - v ** 1.6)) / 2;
+      // Bend over: quadratic in height, so the root stays planted and the
+      // droop accumulates toward the tip.
+      const drop = lean * v * v;
+      const x = baseX + dirX * drop;
+      const z = baseZ + dirZ * drop;
+      // A bent blade is shorter than a straight one; without this the blade
+      // appears to grow as it curves.
+      const y = h * v * (1 - 0.18 * v * v);
+
+      // Perpendicular to the blade's facing, in the ground plane.
+      const px = -dirZ * halfW;
+      const pz = dirX * halfW;
+      positions.push(x - px, y, z - pz, x + px, y, z + pz);
+
+      // The true face normal points sideways out of a near-vertical strip, so
+      // half the blades in the field would face away from the moon and go
+      // black. Tilting the normal hard toward +Y makes the whole field
+      // gather sky and moonlight coherently — the standard grass cheat, and
+      // the difference between a lit field and a field of dark slivers.
+      const n = new THREE.Vector3(dirX * 0.35, 1, dirZ * 0.35).normalize();
+      normals.push(n.x, n.y, n.z, n.x, n.y, n.z);
+
+      const c = root.clone().lerp(tip, v ** 0.8).multiplyScalar(dryness);
+      colors.push(c.r, c.g, c.b, c.r, c.g, c.b);
+      heights.push(v, v);
+      phases.push(phase, phase);
+
+      if (s > 0) {
+        const a = first + (s - 1) * 2;
+        index.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
+      }
+    }
   }
-  const tex = new THREE.CanvasTexture(c);
-  tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
-  return tex;
+
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geo.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+  geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+  geo.setAttribute('aHeight', new THREE.Float32BufferAttribute(heights, 1));
+  geo.setAttribute('aPhase', new THREE.Float32BufferAttribute(phases, 1));
+  geo.setIndex(index);
+  return geo;
 }
 
 // Tall unkempt grass tufts scattered across the field/graveyard, avoiding
 // the dirt road corridor (>=1.2m clearance) so the path stays legible, and
 // weighted denser around the grave spots per the Ghost-Rider reference.
-function buildGrass(scene, count) {
+function buildGrass(scene, count, tier = 'high') {
   if (!count) return;
   const rand = makeLcg(0x9e3779b1);
   const pathSamples = [];
   for (let i = 0; i <= 80; i++) pathSamples.push(positionAt(i / 80));
   const graveXZ = PROP_SPOTS.graves.map(([x, z]) => [x, z]);
 
-  const geo = buildGrassBladeGeometry();
-  const mat = new THREE.MeshBasicMaterial({
-    map: makeGrassTexture(),
-    color: '#8a9070',
-    transparent: true,
-    alphaTest: 0.35,
+  const detail = tier === 'low'
+    ? { blades: 3, segments: 3 }
+    : { blades: 6, segments: 5 };
+  const geo = buildTuftGeometry({
+    ...detail,
+    height: 0.7,
+    curve: 0.34,
+    // Long dead in patches, still green at the roots: the Ghost-Rider
+    // graveyard field, not a lawn.
+    rootColor: '#242b1a',
+    tipColor: '#7b8259',
+  });
+  // Lit, not MeshBasic. Lambert is the cheapest material that responds to
+  // the moon, the hemisphere fill and the red spill from the doorway — which
+  // is the whole reason the field now sits IN the scene rather than on top of
+  // it. Vertex colours carry the root-to-tip gradient, so the material's own
+  // colour stays white and multiplies cleanly.
+  const mat = new THREE.MeshLambertMaterial({
+    color: '#ffffff',
+    vertexColors: true,
     side: THREE.DoubleSide,
   });
-  applySway(mat, 0.055, 0.55);
+  applySway(mat, { amount: 0.075, speed: 0.55 });
   const mesh = new THREE.InstancedMesh(geo, mat, count);
   mesh.name = 'grassField';
   const dummy = new THREE.Object3D();
@@ -293,17 +385,31 @@ function buildGrass(scene, count) {
       x = (rand() - 0.5) * 20;
       z = 2 + rand() * 44;
     }
+    // Clearance from the camera/road corridor. Raised from 1.2m because a
+    // modelled tuft is genuinely WIDER than the old 0.5m crossed quad -- the
+    // blades lean and droop out to ~0.55m from the root before the
+    // per-instance horizontal scale, against a road half-width of ~1.0m. At
+    // 1.2m the drooping tips reached into the wheel ruts.
+    const CLEARANCE = 1.45;
     let minD = Infinity;
     for (const p of pathSamples) {
       const d = Math.hypot(p.x - x, p.z - z);
       if (d < minD) minD = d;
-      if (minD < 1.2) break;
+      if (minD < CLEARANCE) break;
     }
-    if (minD < 1.2) continue;
-    const bladeH = 0.4 + rand() * 0.5;
-    dummy.position.set(x, 0, z);
-    dummy.rotation.set(0, rand() * Math.PI * 2, 0);
-    dummy.scale.set(0.85 + rand() * 0.3, bladeH / 0.7, 0.85 + rand() * 0.3);
+    if (minD < CLEARANCE) continue;
+    // Height varies far more than it used to (0.55x to 1.9x rather than a
+    // flat 0.4-0.9m band): unmown grass around graves grows in uneven clumps,
+    // and a uniform height was as much of a tell as the flat shading was.
+    const tuftH = 0.55 + rand() * rand() * 1.35;
+    dummy.position.set(x, groundHeightAt(x, z), z);
+    dummy.rotation.set(
+      // A slight lean off vertical, so no two tufts stand to attention.
+      (rand() - 0.5) * 0.22,
+      rand() * Math.PI * 2,
+      (rand() - 0.5) * 0.22,
+    );
+    dummy.scale.set(0.8 + rand() * 0.5, tuftH, 0.8 + rand() * 0.5);
     dummy.updateMatrix();
     mesh.setMatrixAt(placed, dummy.matrix);
     placed++;
@@ -321,31 +427,69 @@ function buildGrass(scene, count) {
 // every frame. Instead the material's vertex shader bends each blade by its
 // own height above the ground -- roots stay put, tips move -- driven by one
 // shared uniform. Cost is a few instructions per vertex.
-const windUniforms = { uWind: { value: 0 } };
+//
+// The uniform itself now lives in wind.js, because the procedural trees need
+// it too and importing it from here would be a cycle.
 
-export function setWind(t) {
-  windUniforms.uWind.value = t;
-}
-
-function applySway(material, amount, speed) {
+// Wind that TRAVELS. The previous version drove every blade off a seed
+// derived from its own position with no spatial term, so the entire field
+// oscillated as one body — the giveaway that it was a shader effect rather
+// than weather. Subtracting a term proportional to distance along the wind
+// direction turns the same sine into a wave that crosses the graveyard, and
+// a slow swell on top means the gusts arrive in breaths instead of at one
+// constant strength.
+// Exported for testing: a syntax error in this injected GLSL fails the whole
+// scene to a black screen at runtime, and there is no compiler in the test
+// environment to catch it, so the generated source is asserted directly.
+export function applySway(material, { amount, speed, dir = [0.82, 0.57] } = {}) {
+  // three.js keys its compiled-program cache on `onBeforeCompile.toString()`,
+  // which returns the function's SOURCE TEXT -- with `${amount}` and
+  // `${speed}` still unevaluated. Every material passing through here
+  // therefore produces a byte-identical key, so the grass and the reeds (very
+  // different amount/speed) silently shared whichever program compiled first.
+  // Folding the actual values into the key is what makes them distinct.
+  material.customProgramCacheKey = () => `sway:${amount}:${speed}:${dir.join(',')}`;
   material.onBeforeCompile = (shader) => {
     shader.uniforms.uWind = windUniforms.uWind;
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `#include <common>
-        uniform float uWind;`)
+        uniform float uWind;
+        attribute float aHeight;
+        attribute float aPhase;`)
       .replace('#include <begin_vertex>', `#include <begin_vertex>
         {
-          // Sway scales with height up the blade, so it hinges at the root.
-          float bladeH = max(transformed.y, 0.0);
+          vec3 windDir = vec3(${dir[0].toFixed(3)}, 0.0, ${dir[1].toFixed(3)});
           #ifdef USE_INSTANCING
-            float seed = instanceMatrix[3][0] * 0.7 + instanceMatrix[3][2] * 1.3;
+            vec3 iPos = instanceMatrix[3].xyz;
+            // transformed is still in the tuft's LOCAL space here --
+            // instancing is applied later, in project_vertex. Every tuft
+            // carries a random yaw, so bending along a fixed local axis would
+            // rotate the wind with each tuft and the field would splay in all
+            // directions instead of leaning together. Projecting the world
+            // wind direction onto the instance's own (normalized, so
+            // per-instance scale drops out) axes converts it into local space,
+            // which is what makes one gust cross the whole graveyard.
+            vec3 iX = normalize(instanceMatrix[0].xyz);
+            vec3 iZ = normalize(instanceMatrix[2].xyz);
+            vec2 localDir = vec2(dot(windDir, iX), dot(windDir, iZ));
           #else
-            float seed = 0.0;
+            vec3 iPos = vec3(0.0);
+            vec2 localDir = windDir.xz;
           #endif
-          float gust = sin(uWind * ${speed.toFixed(2)} + seed)
-                     + 0.4 * sin(uWind * ${(speed * 2.3).toFixed(2)} + seed * 1.7);
-          transformed.x += gust * bladeH * ${amount.toFixed(3)};
-          transformed.z += gust * bladeH * ${(amount * 0.6).toFixed(3)};
+          // How far this tuft sits along the wind's line of travel: this is
+          // the term that turns a synchronised oscillation into a wave.
+          float travel = dot(iPos, windDir);
+          float t = uWind * ${speed.toFixed(2)} - travel * 0.45 + aPhase;
+          float gust = sin(t) + 0.35 * sin(t * 2.3 + 1.1);
+          // Breaths: the field goes still and then picks up again.
+          float swell = 0.6 + 0.4 * sin(uWind * 0.11 - travel * 0.08);
+          // Quadratic in height: hinges at the root, whips at the tip.
+          float bend = aHeight * aHeight * gust * swell * ${amount.toFixed(3)};
+          transformed.x += bend * localDir.x;
+          transformed.z += bend * localDir.y;
+          // A blade bent over covers less vertical distance. Without this the
+          // whole field visibly stretches taller on every gust.
+          transformed.y -= abs(bend) * aHeight * 0.35;
         }`);
   };
   material.needsUpdate = true;
@@ -476,46 +620,120 @@ export function pineSpots(count) {
   return spots;
 }
 
-// A single conifer: a stack of two cones over a short trunk, which reads as
-// a pine at the distances involved for a fraction of a model's cost.
-function pineGeometry() {
+// A single conifer, as a stack of BRANCH TIERS over a short trunk.
+//
+// This was two smooth cones. At the distances involved the only thing that
+// survives the fog is the SILHOUETTE, and a cone's silhouette is two perfectly
+// straight lines meeting at a point — which the eye reads as a geometric
+// primitive instantly, no matter how well it is lit or coloured. A real
+// conifer's outline is a stack of drooping branch whorls: it steps in and out
+// on the way up, and no two steps are the same.
+//
+// So: several short, wide-based tiers, each one rotated off its neighbour and
+// jittered in radius, height and lateral offset. The profile now breaks up
+// every few metres and the trees lean slightly off true. Deterministic (fixed
+// LCG) so the treeline is identical on every load.
+export function pineGeometry(seed = 0xc0ffee) {
+  const rand = makeLcg(seed);
   const parts = [];
-  const trunk = new THREE.CylinderGeometry(0.18, 0.26, 1.6, 5);
-  trunk.translate(0, 0.8, 0);
+
+  const trunk = new THREE.CylinderGeometry(0.14, 0.3, 2.2, 5);
+  trunk.translate(0, 1.1, 0);
   parts.push(trunk);
-  const lower = new THREE.ConeGeometry(1.9, 4.2, 7);
-  lower.translate(0, 3.3, 0);
-  parts.push(lower);
-  const upper = new THREE.ConeGeometry(1.25, 3.4, 7);
-  upper.translate(0, 5.9, 0);
-  parts.push(upper);
-  return mergeGeometries(parts);
+
+  // Tiers run from a wide skirt at the bottom to a spire at the top.
+  const TIERS = 6;
+  let y = 1.5;
+  for (let i = 0; i < TIERS; i++) {
+    const v = i / (TIERS - 1);
+    // Radius tapers up the tree, with enough jitter that no two tiers line up
+    // into a straight cone edge.
+    const radius = (1.95 - v * 1.55) * (0.82 + rand() * 0.36);
+    const height = (2.3 - v * 0.9) * (0.85 + rand() * 0.3);
+    // 5 radial segments, deliberately low: the faceting IS the branchiness at
+    // this distance, and it costs a third of what a smooth cone does.
+    const tier = new THREE.ConeGeometry(radius, height, 5);
+    // Spin each tier so the facets never stack into a continuous ridge.
+    tier.rotateY(rand() * Math.PI * 2);
+    // Real whorls are not centred on the trunk.
+    tier.translate((rand() - 0.5) * 0.22, y + height * 0.35, (rand() - 0.5) * 0.22);
+    parts.push(tier);
+    // Tiers overlap rather than stack, so there is no gap to see through.
+    y += height * 0.52;
+  }
+
+  const geo = mergeGeometries(parts);
+
+  // The wind shader needs to know how far up the tree each vertex sits.
+  // Pines share the grass's sway code, so they use the same attribute names
+  // — one gust crosses the grass, the reeds and the treeline together.
+  // Measured from the geometry that was actually built, not from a constant
+  // kept in sync by hand: the tier loop's jitter means the final height moves
+  // whenever the tiers are retuned, and a stale constant would silently
+  // either clamp the crowns to a rigid cap or stop them reaching full sway.
+  geo.computeBoundingBox();
+  const top = Math.max(geo.boundingBox.max.y, 1e-4);
+  const pos = geo.getAttribute('position');
+  const heights = new Float32Array(pos.count);
+  const phases = new Float32Array(pos.count);
+  for (let i = 0; i < pos.count; i++) {
+    heights[i] = Math.min(Math.max(pos.getY(i) / top, 0), 1);
+    phases[i] = 0; // variation comes from each instance's position instead
+  }
+  geo.setAttribute('aHeight', new THREE.BufferAttribute(heights, 1));
+  geo.setAttribute('aPhase', new THREE.BufferAttribute(phases, 1));
+  return geo;
 }
 
 function buildBackdrop(scene, tier) {
   // The woods.
   const count = tier === 'low' ? 220 : 520;
-  const pines = new THREE.InstancedMesh(
-    pineGeometry(),
+  const pineMat = new THREE.MeshStandardMaterial({
     // Lighter than the fog it stands in (NIGHT_SKY #141d30), not darker:
     // anything darker than the fog colour converges to it with distance and
     // simply disappears. A treeline in mist reads as a PALE band against the
     // night, which is also how it looks in the reference photography.
-    new THREE.MeshStandardMaterial({ color: '#2c3d33', roughness: 1 }),
-    count,
-  );
+    // White here because the per-instance colours below carry the tone.
+    color: '#ffffff',
+    roughness: 1,
+  });
+  // Trees sway far less than grass and much more slowly — a conifer moves as
+  // one mass, it does not whip. Same uWind clock as the grass, so the gust
+  // that crosses the field carries on into the woods.
+  applySway(pineMat, { amount: 0.22, speed: 0.16 });
+
+  const pines = new THREE.InstancedMesh(pineGeometry(), pineMat, count);
   pines.name = 'pineWoods';
   const dummy = new THREE.Object3D();
   const spots = pineSpots(count);
+  const tint = new THREE.Color();
+  const base = new THREE.Color('#2c3d33');
+  const tintRand = makeLcg(0x11cede7);
   spots.forEach(([x, z, sc], i) => {
     dummy.position.set(x, 0, z);
-    dummy.rotation.set(0, (i * 2.399) % (Math.PI * 2), 0);
+    dummy.rotation.set(
+      // Woods on uneven ground do not all stand plumb.
+      (tintRand() - 0.5) * 0.1,
+      (i * 2.399) % (Math.PI * 2),
+      (tintRand() - 0.5) * 0.1,
+    );
     dummy.scale.set(sc, sc * (0.85 + ((i * 29) % 50) / 100), sc);
     dummy.updateMatrix();
     pines.setMatrixAt(i, dummy.matrix);
+
+    // Every pine was previously the exact same flat colour, which made the
+    // whole treeline read as one cut-out band rather than as many trees at
+    // many depths. Varying the tone per tree — and lifting the far ones
+    // toward the fog colour — restores the depth the fog alone cannot give.
+    const depth = Math.min(Math.hypot(x, z) / PINE_OUTER, 1);
+    tint.copy(base)
+      .multiplyScalar(0.72 + tintRand() * 0.5)
+      .lerp(new THREE.Color(NIGHT_SKY), depth * 0.45);
+    pines.setColorAt(i, tint);
   });
   pines.count = spots.length;
   pines.instanceMatrix.needsUpdate = true;
+  if (pines.instanceColor) pines.instanceColor.needsUpdate = true;
   scene.add(pines);
 
   // The hills: a ring wall whose top edge undulates, read as a horizon
@@ -560,6 +778,139 @@ function buildBackdrop(scene, tier) {
 export const SWAMP_CENTRE = [0, 30];
 export const SWAMP_RADIUS = 17;
 
+// Standing water, as pools FLANKING the causeway rather than one disc laid
+// over it.
+//
+// The pool used to be a single CircleGeometry of radius 17 centred at [0,30]
+// -- straight through the middle of the road. 59% of the camera path ran
+// inside it and it passed within 1.79m of the centre, so the visitor walked
+// the length of a flooded track with the dirt ribbon floating on top of the
+// water rather than beside it. Two pools set either side is both what the
+// complaint asks for and what low country actually looks like: a raised
+// causeway with water on both hands.
+// Two SMALL ponds, sited in the only real gaps in the graveyard.
+//
+// The first attempt at this put an 8.5m and a 7.5m pool at [-9.5,31] and
+// [10.5,24] on the strength of their distance from the ROAD alone. Nothing
+// checked them against the props, and they turned out to swallow 8
+// gravestones, 5 trees and 3 of the watchers -- markers standing in open
+// water and trees growing out of a pond. The graveyard is dense enough near
+// the path that there is no room for anything bigger than this: measured, the
+// widest genuinely open ground within sight of the road is ~6.9m across.
+export const POOLS = [
+  { centre: [-12.25, 16], radius: 5.1, seed: 0x9a7e01 },
+  { centre: [12.25, 37.5], radius: 5.3, seed: 0x9a7e02 },
+];
+
+// Everything a pond must not drown. Kept as a function because the spots are
+// defined further down the file.
+function poolObstacles() {
+  return [
+    ...PROP_SPOTS.graves.map(([x, z]) => [x, z, 1.9]),
+    ...PROP_SPOTS.trees.map(([x, z]) => [x, z, 2.6]),
+    ...WATCHER_SPOTS.map(([x, z]) => [x, z, 1.6]),
+    [TRUCK_SPOT[0], TRUCK_SPOT[1], 4.4],
+  ];
+}
+
+// One pool's shoreline, as a closed polygon.
+//
+// A circle is the single biggest tell that water is a primitive, so the
+// radius wanders on three octaves. Every point is then pulled inward until it
+// is at least `margin` from the camera corridor, which is what guarantees the
+// road stays dry no matter how the outline is retuned. Pulling along the ray
+// from the centre keeps the polygon star-shaped, so the fan triangulation
+// below stays valid.
+export function poolOutline({ centre, radius, seed, samples = 60, margin = 2.4 }) {
+  const rand = makeLcg(seed);
+  const p1 = rand() * Math.PI * 2;
+  const p2 = rand() * Math.PI * 2;
+  const p3 = rand() * Math.PI * 2;
+  const path = [];
+  for (let i = 0; i <= 120; i++) path.push(positionAt(i / 120));
+
+  // The shoreline must clear the road AND everything standing in the field.
+  // Returns how much slack a candidate point has: positive means it is clear
+  // of every constraint, negative means it has already drowned something.
+  //
+  // Props were not part of this at first, and the ponds simply grew over
+  // them -- gravestones in open water, trees growing out of a pond.
+  const obstacles = poolObstacles();
+  const slackAt = (a, r) => {
+    const x = centre[0] + Math.cos(a) * r;
+    const z = centre[1] + Math.sin(a) * r;
+    let slack = Infinity;
+    for (const p of path) {
+      const d = Math.hypot(p.x - x, p.z - z) - margin;
+      if (d < slack) slack = d;
+    }
+    for (const [ox, oz, keep] of obstacles) {
+      const d = Math.hypot(ox - x, oz - z) - keep;
+      if (d < slack) slack = d;
+    }
+    return slack;
+  };
+
+  // Base radius per angle, then pulled in to clear the road.
+  //
+  // The pull used to step down in fixed 0.3m decrements, so neighbouring
+  // points could land on different steps and the bank came out visibly
+  // notched -- straight faceted segments right where the shoreline should be
+  // at its most organic. Binary search gives a continuous answer instead.
+  const angles = [];
+  const radii = [];
+  for (let i = 0; i < samples; i++) {
+    const a = (i / samples) * Math.PI * 2;
+    const base = radius * (1
+      + 0.24 * Math.sin(a * 2 + p1)
+      + 0.14 * Math.sin(a * 3 + p2)
+      + 0.07 * Math.sin(a * 5 + p3));
+
+    let r = base;
+    if (slackAt(a, base) < 0) {
+      let lo = 0.3;
+      let hi = base;
+      for (let k = 0; k < 22; k++) {
+        const mid = (lo + hi) / 2;
+        if (slackAt(a, mid) >= 0) lo = mid;
+        else hi = mid;
+      }
+      r = lo;
+    }
+    angles.push(a);
+    radii.push(r);
+  }
+
+  // Smooth the shoreline, then re-clamp. Binary search removes the stepping
+  // but still leaves a hard corner where the clamp starts biting; a short
+  // blur rounds the transition into the bank. Re-clamping afterwards is what
+  // keeps the smoothing from pushing water back over the road.
+  const smoothed = radii.map((_, i) => {
+    const a = radii[(i - 1 + samples) % samples];
+    const b = radii[i];
+    const c = radii[(i + 1) % samples];
+    return a * 0.25 + b * 0.5 + c * 0.25;
+  });
+  for (let i = 0; i < samples; i++) {
+    radii[i] = Math.min(smoothed[i], radii[i] * 1.02);
+    if (slackAt(angles[i], radii[i]) < 0) {
+      let lo = 0.3;
+      let hi = radii[i];
+      for (let k = 0; k < 22; k++) {
+        const mid = (lo + hi) / 2;
+        if (slackAt(angles[i], mid) >= 0) lo = mid;
+        else hi = mid;
+      }
+      radii[i] = lo;
+    }
+  }
+
+  return radii.map((r, i) => [
+    +(centre[0] + Math.cos(angles[i]) * r).toFixed(3),
+    +(centre[1] + Math.sin(angles[i]) * r).toFixed(3),
+  ]);
+}
+
 // Deterministic, and held clear of the camera corridor — the clearance test
 // is only meaningful against fixed positions.
 export function swampReedSpots(count) {
@@ -584,11 +935,36 @@ export function swampReedSpots(count) {
   return spots;
 }
 
-// An abandoned bike left by the trail — the one survivor of the retired
-// rider's chapel, kept because a wrecked machine at the roadside is pure
-// southern gothic and the asset already exists. Measured 3.11m clear of the
-// camera corridor.
+// An abandoned 1930s truck left by the trail — a wrecked machine at the
+// roadside is pure southern gothic, and a truck carries more of that than the
+// motorcycle it replaces because it implies people, not a rider.
+//
+// Measured 6.63m clear of the camera corridor, 4.0m from the nearest tree and
+// 3.2m from the nearest gravestone. The clearance is much larger than the
+// bike's 3.11m because the truck is a far bigger object: normalised to 2.2m
+// tall it occupies a 3.3m x 6.2m footprint, so a bike's spot would have put
+// its running board in the road.
+export const TRUCK_SPOT = [7.0, 12.0, -0.55];
+
+// Kept for the tests that still assert the old prop's corridor clearance, and
+// because motorcycle.glb is still in public/models if it is ever wanted back.
 export const BIKE_SPOT = [3.6, 11.0, -0.7];
+
+// Figures standing back among the trees, motionless, never acknowledged.
+//
+// They are lit by nothing special: the lightning in weather.js is a real
+// DirectionalLight, so a strike rakes them exactly as it rakes the treeline,
+// and they simply become visible for the half-second it lasts. That is the
+// whole effect, and it needs no per-frame code at all — which is also why it
+// will always stay in sync with the weather rather than drifting from it.
+//
+// [x, z, rotY] — each is turned to face the road, so whichever way the
+// visitor is looking when a strike lands, it is looking back.
+export const WATCHER_SPOTS = [
+  [-9.2, 22.0, 1.35],
+  [9.5, 29.0, -1.25],
+  [-8.0, 35.0, 1.15],
+];
 
 // Cypress-style dead trees standing back from the approach, deterministic
 // and clear of the camera corridor.
@@ -613,8 +989,99 @@ export function swampTreeSpots() {
 // Scum, silt and duckweed on standing water. Drawn once to a canvas and
 // tiled: the surface needs to look like something is floating on it, which
 // is what separates swamp water from a mirror.
+// One tile of water surface, WATER_TILE metres square.
+//
+// Sizing note: this used to be a 256px canvas repeated 6x across a 17m pool,
+// which works out at 90 pixels per metre -- roughly half the density of the
+// church's textures on comparable features, and the reason the surface read
+// as low resolution. 512px over a 3m tile is 171 px/m, and because the UVs
+// are now in WORLD space (see buildPool) that density is identical on every
+// pool regardless of its size, instead of stretching with the radius.
+const WATER_TILE = 3;
+
+// How deep the basin under each pool is cut, and where the water sits in it.
+//
+// The pools were previously a flat plane laid on flat ground: the shoreline
+// was a 2D line with nothing behind it, so however well the surface waved it
+// read as paper on a table. There is no shader fix for that, because the
+// missing cue is in the TERRAIN -- water in a hollow reads as water because
+// you can see the bank falling away into it.
+export const BASIN_DEPTH = 0.85;
+// The surface sits just below the surrounding field, so the pool fills its
+// hollow to the brim and no basin floor shows through inside the waterline.
+export const WATER_LEVEL = -0.12;
+// How far out the bank slopes up to meet the field.
+const BASIN_MARGIN = 2.6;
+
+// Cached because both the ground (which needs the shapes to carve itself) and
+// the pools (which are built from them) ask for the same outlines, and each
+// one costs a full sweep of the camera path per sample.
+let poolShapeCache = null;
+
+export function poolShapes() {
+  if (!poolShapeCache) {
+    poolShapeCache = POOLS.map((p) => ({ ...p, outline: poolOutline({ ...p, samples: 96 }) }));
+  }
+  return poolShapeCache;
+}
+
+// The outline's radius at an arbitrary angle, interpolated between samples.
+function outlineRadiusAt(shape, angle) {
+  const { outline, centre } = shape;
+  const n = outline.length;
+  const a = ((angle % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+  const f = (a / (Math.PI * 2)) * n;
+  const i0 = Math.floor(f) % n;
+  const i1 = (i0 + 1) % n;
+  const t = f - Math.floor(f);
+  const r0 = Math.hypot(outline[i0][0] - centre[0], outline[i0][1] - centre[1]);
+  const r1 = Math.hypot(outline[i1][0] - centre[0], outline[i1][1] - centre[1]);
+  return r0 + (r1 - r0) * t;
+}
+
+// Ground height at a world point: 0 across the field, dipping into a basin
+// under each pool. Exported so anything standing on the ground (reeds,
+// boulders) can sit on it rather than hovering at y=0 over a hollow.
+let groundPathSamples = null;
+
+export function groundHeightAt(x, z, shapes = poolShapes()) {
+  let drop = 0;
+  for (const shape of shapes) {
+    const dx = x - shape.centre[0];
+    const dz = z - shape.centre[1];
+    const dist = Math.hypot(dx, dz);
+    const rOut = outlineRadiusAt(shape, Math.atan2(dz, dx));
+    const rim = rOut + BASIN_MARGIN;
+    if (dist >= rim) continue;
+    // Full depth by 60% of the way in, so the bed is dished rather than a
+    // flat-bottomed tub with a step at the waterline.
+    const inner = rOut * 0.6;
+    const t = Math.min(Math.max((rim - dist) / (rim - inner), 0), 1);
+    drop = Math.max(drop, BASIN_DEPTH * (t * t * (3 - 2 * t)));
+  }
+  if (drop === 0) return 0;
+
+  // The road is a flat ribbon laid at y=0.012; if a basin's outer slope
+  // reached under it the road would hang in the air over a dip. This fade
+  // lives HERE rather than in the ground builder so that the terrain mesh and
+  // everything standing on it are derived from one definition of ground
+  // height -- when the mesh had its own version, props sat at the uncarved
+  // height and floated over the dip.
+  if (!groundPathSamples) {
+    groundPathSamples = [];
+    for (let i = 0; i <= 140; i++) groundPathSamples.push(positionAt(i / 140));
+  }
+  let nearPath = Infinity;
+  for (const p of groundPathSamples) {
+    const d = Math.hypot(p.x - x, p.z - z);
+    if (d < nearPath) nearPath = d;
+  }
+  const keep = Math.min(Math.max((nearPath - 1.6) / 1.4, 0), 1);
+  return -drop * keep * keep * (3 - 2 * keep);
+}
+
 function makeWaterTexture() {
-  const size = 256;
+  const size = 512;
   const canvas = document.createElement('canvas');
   canvas.width = size;
   canvas.height = size;
@@ -623,106 +1090,338 @@ function makeWaterTexture() {
   ctx.fillRect(0, 0, size, size);
 
   const rand = makeLcg(0x51117e2);
+
+  // Everything is drawn nine times, once per neighbouring tile offset, so
+  // marks crossing an edge reappear on the far side. The old texture was
+  // drawn without wrapping, which put a visible grid of seams across the
+  // pool as soon as it tiled more than once or twice.
+  const wrapped = (draw) => {
+    for (let ox = -1; ox <= 1; ox++) {
+      for (let oy = -1; oy <= 1; oy++) draw(ox * size, oy * size);
+    }
+  };
+
   // Silt mottling: broad, soft, low contrast.
-  for (let i = 0; i < 90; i++) {
-    const r = 12 + rand() * 42;
-    const g = ctx.createRadialGradient(rand() * size, rand() * size, 0, 0, 0, r);
-    ctx.globalAlpha = 0.05 + rand() * 0.08;
-    ctx.fillStyle = rand() > 0.5 ? '#24322a' : '#0e1613';
-    ctx.beginPath();
-    ctx.arc(rand() * size, rand() * size, r, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  // Duckweed: small green flecks gathered in drifts.
-  ctx.globalAlpha = 1;
-  for (let i = 0; i < 900; i++) {
+  for (let i = 0; i < 100; i++) {
     const cx = rand() * size;
     const cy = rand() * size;
-    ctx.fillStyle = rand() > 0.35 ? '#2c3d26' : '#374b2e';
-    ctx.globalAlpha = 0.25 + rand() * 0.5;
-    ctx.beginPath();
-    ctx.arc(cx, cy, 0.7 + rand() * 1.6, 0, Math.PI * 2);
-    ctx.fill();
+    const r = 23 + rand() * 80;
+    const alpha = 0.05 + rand() * 0.08;
+    const fill = rand() > 0.5 ? '#24322a' : '#0e1613';
+    wrapped((dx, dy) => {
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = fill;
+      ctx.beginPath();
+      ctx.arc(cx + dx, cy + dy, r, 0, Math.PI * 2);
+      ctx.fill();
+    });
+  }
+
+  // Duckweed: small green flecks gathered in drifts. Radius is set from the
+  // new density so each fleck stays the same ~1-2cm across in world terms.
+  for (let i = 0; i < 1000; i++) {
+    const cx = rand() * size;
+    const cy = rand() * size;
+    const r = 1.3 + rand() * 1.7;
+    const fill = rand() > 0.35 ? '#2c3d26' : '#374b2e';
+    const alpha = 0.25 + rand() * 0.5;
+    wrapped((dx, dy) => {
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = fill;
+      ctx.beginPath();
+      ctx.arc(cx + dx, cy + dy, r, 0, Math.PI * 2);
+      ctx.fill();
+    });
   }
   ctx.globalAlpha = 1;
 
   const tex = new THREE.CanvasTexture(canvas);
   tex.wrapS = THREE.RepeatWrapping;
   tex.wrapT = THREE.RepeatWrapping;
-  tex.repeat.set(6, 6);
+  // The UVs carry the tiling now, so this stays 1:1.
+  tex.repeat.set(1, 1);
+  tex.anisotropy = 8; // the surface is viewed at a very grazing angle
   return tex;
 }
 
-let swampWater = null;
+let swampWater = [];
+
+// Builds one pool's surface from its outline: a triangle fan from the centre,
+// with the shoreline darkened through vertex colours so the water shallows
+// into the bank instead of ending at a hard rim like a sticker laid on the
+// ground. That hard edge is most of what made the old disc read as a
+// primitive, along with its perfectly circular outline.
+// The ground, as a radial grid dished into a basin under each pool.
+//
+// Built in the XZ plane directly (not rotated into place like the old
+// CircleGeometry) so the basin carving can be expressed in world coordinates
+// and groundHeightAt() means the same thing here as it does everywhere else.
+function buildGroundGeometry() {
+  const SEGMENTS = 128;
+  const shapes = poolShapes();
+
+  // Dense where the journey happens, coarse out at the fog line.
+  const radii = [0];
+  for (let r = 0.7; r < 52; r += 0.75) radii.push(r);
+  for (let r = 53; r <= 90; r += 3.5) radii.push(r);
+
+  const positions = [];
+  const normals = [];
+  const index = [];
+
+  // One definition of ground height, shared with every prop that stands on
+  // it (see groundHeightAt, which owns the road fade too).
+  const carveAt = (x, z) => groundHeightAt(x, z, shapes);
+
+  positions.push(0, carveAt(0, 0), 0);
+  normals.push(0, 1, 0);
+  for (let ri = 1; ri < radii.length; ri++) {
+    for (let s = 0; s < SEGMENTS; s++) {
+      const a = (s / SEGMENTS) * Math.PI * 2;
+      const x = Math.cos(a) * radii[ri];
+      const z = Math.sin(a) * radii[ri];
+      positions.push(x, carveAt(x, z), z);
+      normals.push(0, 1, 0); // replaced by computeVertexNormals below
+    }
+  }
+
+  const ringStart = (ri) => 1 + (ri - 1) * SEGMENTS;
+  for (let s = 0; s < SEGMENTS; s++) {
+    index.push(0, ringStart(1) + s, ringStart(1) + ((s + 1) % SEGMENTS));
+  }
+  for (let ri = 1; ri < radii.length - 1; ri++) {
+    for (let s = 0; s < SEGMENTS; s++) {
+      const a = ringStart(ri) + s;
+      const b = ringStart(ri) + ((s + 1) % SEGMENTS);
+      const c = ringStart(ri + 1) + s;
+      const d = ringStart(ri + 1) + ((s + 1) % SEGMENTS);
+      index.push(a, c, b, b, c, d);
+    }
+  }
+
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geo.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+  geo.setIndex(index);
+  // Real normals, so the bank catches the moon differently from the flat
+  // field and the hollow is legible as a shape rather than a colour change.
+  geo.computeVertexNormals();
+  return geo;
+}
+
+// Rings, not a fan.
+//
+// A triangle fan gives a pool exactly ONE interior vertex, and that breaks
+// two things at once: the wave in applyWaterMotion displaces vertices, so
+// with nothing between the centre and the rim there is nothing for it to move
+// and the surface stays dead flat however good the shader is; and the
+// shoreline darkening interpolates straight from the middle to the edge,
+// shading the pool like a cone. Concentric rings give the interior real
+// vertices to move and a shoreline that reads as a margin instead of a
+// gradient across the whole pond.
+const POOL_RINGS = 14;
+
+function buildPool({ centre, outline }) {
+  const n = outline.length;
+  const positions = [];
+  const colors = [];
+  // WORLD-space UVs: one texture tile per WATER_TILE metres, everywhere. The
+  // previous mapping normalised by the pool's radius, so a bigger pool
+  // stretched the same texture further and got blurrier -- texel density
+  // varied with pool size instead of being a property of the water.
+  const uvs = [];
+  const index = [];
+
+  // Ring 0 is the centre point, rings 1..POOL_RINGS march out to the outline.
+  positions.push(centre[0], 0, centre[1]);
+  colors.push(1, 1, 1);
+  uvs.push(centre[0] / WATER_TILE, centre[1] / WATER_TILE);
+
+  for (let r = 1; r <= POOL_RINGS; r++) {
+    const t = r / POOL_RINGS;
+    // Only the outer quarter shallows out, so the pool reads as deep water
+    // with a silty margin rather than as a cone.
+    const shade = t < 0.75 ? 1 : 1 - ((t - 0.75) / 0.25) * 0.65;
+    for (let i = 0; i < n; i++) {
+      const x = centre[0] + (outline[i][0] - centre[0]) * t;
+      const z = centre[1] + (outline[i][1] - centre[1]) * t;
+      positions.push(x, 0, z);
+      colors.push(shade, shade, shade);
+      uvs.push(x / WATER_TILE, z / WATER_TILE);
+    }
+  }
+
+  const ringStart = (r) => 1 + (r - 1) * n;
+  // Innermost fan, centre to ring 1.
+  for (let i = 0; i < n; i++) {
+    index.push(0, ringStart(1) + ((i + 1) % n), ringStart(1) + i);
+  }
+  // Quads between successive rings.
+  for (let r = 1; r < POOL_RINGS; r++) {
+    for (let i = 0; i < n; i++) {
+      const a = ringStart(r) + i;
+      const b = ringStart(r) + ((i + 1) % n);
+      const c = ringStart(r + 1) + i;
+      const d = ringStart(r + 1) + ((i + 1) % n);
+      index.push(a, b, c, b, d, c);
+    }
+  }
+
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  geo.setIndex(index);
+  geo.computeVertexNormals();
+  return geo;
+}
+
+// Moving water. The old surface was rippled ONCE into the geometry and then
+// never moved -- only its texture slid, which reads as a pattern drifting
+// under glass rather than as a liquid. This displaces the surface every frame
+// off the scene's shared clock AND rebuilds the normal analytically from the
+// same wave, so the moon's highlights travel across the pool. Highlights that
+// move are what actually make a flat plane read as water.
+function applyWaterMotion(material) {
+  material.customProgramCacheKey = () => 'water:v2';
+  material.onBeforeCompile = (shader) => {
+    shader.uniforms.uWind = windUniforms.uWind;
+    shader.uniforms.uSkyTint = { value: new THREE.Color('#33425e') };
+
+    // FRESNEL — the thing that actually makes a plane read as water.
+    //
+    // A surface lit only by diffuse light is equally bright wherever you
+    // stand, which is why the pool read as pale paper lying on the ground no
+    // matter how well it waved. Real water is nearly transparent when you
+    // look straight down into it and nearly a mirror when you look across it,
+    // and since the camera is at eye height that means the near water should
+    // be dark and the far water should lift toward the sky. That gradient IS
+    // the sense of depth; without it there is no cue for which part of the
+    // surface is near.
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', `#include <common>
+        uniform vec3 uSkyTint;`)
+      .replace('#include <fog_fragment>', `
+        {
+          // vViewPosition points from the fragment to the camera, and normal
+          // is in the same view space, so this is the true incidence angle.
+          float cosI = clamp(dot(normalize(vViewPosition), normalize(normal)), 0.0, 1.0);
+          // Schlick, weighted so grazing water lifts hard toward the sky.
+          float fres = pow(1.0 - cosI, 4.0);
+          gl_FragColor.rgb = mix(gl_FragColor.rgb, uSkyTint, fres * 0.78);
+        }
+        #include <fog_fragment>`);
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', `#include <common>
+        uniform float uWind;
+        // Amplitudes are in METRES. These were 1.6cm, 1.1cm and 0.5cm --
+        // physically reasonable for a still pond and completely invisible at
+        // the distances involved, which is why the surface still read as
+        // flat while demonstrably moving. Ripples on real standing water in
+        // wind run several centimetres, and the scene needs to SEE them.
+        float waveAt(vec2 p, float t) {
+          return sin(p.x * 0.62 + t * 0.55) * 0.075
+               + sin(p.y * 0.94 - t * 0.43) * 0.052
+               + sin((p.x + p.y) * 1.7 + t * 0.85) * 0.026
+               + sin((p.x - p.y) * 3.1 - t * 1.25) * 0.011;
+        }`)
+      .replace('#include <beginnormal_vertex>', `#include <beginnormal_vertex>
+        {
+          // Analytic derivatives of waveAt, so the normal matches the
+          // displacement exactly instead of being approximated.
+          vec2 p = position.xz;
+          float t = uWind;
+          float dx = 0.62 * 0.075 * cos(p.x * 0.62 + t * 0.55)
+                   + 1.7 * 0.026 * cos((p.x + p.y) * 1.7 + t * 0.85)
+                   + 3.1 * 0.011 * cos((p.x - p.y) * 3.1 - t * 1.25);
+          float dz = 0.94 * 0.052 * cos(p.y * 0.94 - t * 0.43)
+                   + 1.7 * 0.026 * cos((p.x + p.y) * 1.7 + t * 0.85)
+                   - 3.1 * 0.011 * cos((p.x - p.y) * 3.1 - t * 1.25);
+          objectNormal = normalize(vec3(-dx * 3.0, 1.0, -dz * 3.0));
+        }`)
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+        transformed.y += waveAt(position.xz, uWind);`);
+  };
+  material.needsUpdate = true;
+}
 
 function buildSwamp(scene, models, tier) {
   // Standing swamp water. Two things it must NOT be: a black void (the first
   // version, too dark and metallic to reflect anything in this scene) or a
-  // mirror (the second, a perfectly flat plane at low roughness, which is
-  // why it read as polished glass). Real still water in a marsh is mostly
-  // scattered surface detail -- duckweed, silt, broken reflections -- so
-  // this is a gently rippled surface with a procedural scum texture and low
-  // metalness, and it reads as water because of its DETAIL, not its shine.
-  const waterGeo = new THREE.CircleGeometry(SWAMP_RADIUS, 72, 1);
-  {
-    // Ripple the surface so it never behaves as one flat mirror. Amplitude
-    // is a couple of centimetres -- enough to break up specular highlights
-    // across the sheet, far too little to read as waves.
-    const pos = waterGeo.attributes.position;
-    for (let i = 0; i < pos.count; i++) {
-      const x = pos.getX(i);
-      const y = pos.getY(i); // pre-rotation, this is world z
-      pos.setZ(
-        i,
-        Math.sin(x * 0.55 + y * 0.21) * 0.03
-          + Math.sin(x * 0.17 - y * 0.63 + 1.7) * 0.022
-          + Math.sin((x + y) * 1.3) * 0.008,
-      );
-    }
-    waterGeo.computeVertexNormals();
-  }
+  // mirror (the second, a perfectly flat plane at low roughness, which is why
+  // it read as polished glass). Real still water in a marsh is mostly
+  // scattered surface detail -- duckweed, silt, broken reflections -- so this
+  // reads as water because of its DETAIL and its MOTION, not its shine.
+  //
+  // And it is now two pools either side of the causeway rather than one disc
+  // through the middle of it: see POOLS above.
+  const waterTex = makeWaterTexture();
+  swampWater = poolShapes().map((pool) => {
+    const mat = new THREE.MeshStandardMaterial({
+      // Much darker and far more specular than before (was #121b17 at
+      // roughness 0.62 / metalness 0.12, which is a MATTE surface -- it
+      // scattered the moonlight back evenly in every direction and came out
+      // paler than the ground it sat in). Water is not matte: it is dark
+      // where you look into it and it reflects where you look across it, so
+      // the albedo goes down and the roughness comes right down with it. What
+      // brightness there is now comes from the moon's specular and from the
+      // Fresnel term above, both of which change with viewing angle.
+      color: '#080f0d',
+      map: waterTex,
+      vertexColors: true,
+      roughness: 0.22,
+      metalness: 0.4,
+    });
+    applyWaterMotion(mat);
+    const mesh = new THREE.Mesh(buildPool(pool), mat);
+    // Down in the basin the ground carves for it (see BASIN_DEPTH), a hand's
+    // breadth below the surrounding field. The bed underneath falls away to
+    // -0.85m, so the pool holds water to its brim with no basin floor showing
+    // through inside the waterline, and the bank is visible all the way
+    // round.
+    mesh.position.y = WATER_LEVEL;
+    mesh.name = 'swampWater';
+    scene.add(mesh);
+    return mesh;
+  });
 
-  const water = new THREE.Mesh(
-    waterGeo,
-    new THREE.MeshStandardMaterial({
-      color: '#121b17',
-      map: makeWaterTexture(),
-      roughness: 0.78,
-      metalness: 0.05,
-    }),
-  );
-  water.rotation.x = -Math.PI / 2;
-  // Just ABOVE the ground plane, but just BELOW the dirt trail (y=0.012):
-  // at -0.05 the opaque ground hid it completely, and anything above the
-  // trail would flood the road the camera drives along.
-  water.position.set(SWAMP_CENTRE[0], 0.006, SWAMP_CENTRE[1]);
-  water.name = 'swampWater';
-  scene.add(water);
-  swampWater = water;
-
-  // Reeds: the graveyard's grass blade, taller and colder, standing in and
-  // around the water.
+  // Reeds: the graveyard's tuft, built taller, straighter and colder. Reeds
+  // stand up out of water rather than flopping over like dry grass, so they
+  // get far less curve and fewer, longer blades per clump.
   const count = tier === 'low' ? 320 : 900;
   const mesh = new THREE.InstancedMesh(
-    buildGrassBladeGeometry(),
-    new THREE.MeshBasicMaterial({
-      map: makeGrassTexture(),
-      color: '#5d6a4a',
-      transparent: true,
-      alphaTest: 0.35,
+    buildTuftGeometry({
+      blades: tier === 'low' ? 3 : 5,
+      segments: tier === 'low' ? 3 : 5,
+      height: 1.15,
+      width: 0.035,
+      curve: 0.14,
+      spread: 0.04,
+      rootColor: '#1c2620',
+      tipColor: '#5f6f4d',
+      seed: 0x5eedbeef,
+    }),
+    new THREE.MeshLambertMaterial({
+      color: '#ffffff',
+      vertexColors: true,
       side: THREE.DoubleSide,
     }),
     count,
   );
   mesh.name = 'swampReeds';
-  // Reeds are taller and stand in water, so they move more than the grass.
-  applySway(mesh.material, 0.09, 0.42);
+  // Reeds are taller and stand in open water, so they catch more wind — and
+  // being slower and heavier, they answer it later.
+  applySway(mesh.material, { amount: 0.13, speed: 0.42 });
   const dummy = new THREE.Object3D();
   const spots = swampReedSpots(count);
   spots.forEach(([x, z], i) => {
-    dummy.position.set(x, -0.03, z);
+    // On the terrain, not at a fixed y: the ground now dips into a basin
+    // under each pool, so a reed pinned to -0.03 near a pool would stand in
+    // mid-air over the hollow. Sunk a little under it so the bases are always
+    // buried rather than resting exactly on the surface.
+    dummy.position.set(x, groundHeightAt(x, z) - 0.03, z);
     dummy.rotation.set(0, (i * 2.399) % (Math.PI * 2), 0);
-    dummy.scale.set(1, 1.5 + ((i * 37) % 70) / 100, 1);
+    dummy.scale.set(1, 0.85 + ((i * 37) % 70) / 100, 1);
     dummy.updateMatrix();
     mesh.setMatrixAt(i, dummy.matrix);
   });
@@ -730,26 +1429,400 @@ function buildSwamp(scene, models, tier) {
   mesh.instanceMatrix.needsUpdate = true;
   scene.add(mesh);
 
-  // The abandoned bike, if it loaded.
-  if (models.bike) {
-    const [bx, bz, brot] = BIKE_SPOT;
-    const bike = normalizeProp(models.bike.scene.clone(true), 1.15);
-    bike.position.set(bx, 0, bz);
-    bike.rotation.y = brot;
-    scene.add(bike);
+  // The abandoned truck, if it loaded. 2.2m to the cab roof, which is about
+  // right for a 1930s light truck and keeps it readable against the treeline
+  // without looming over the gravestones.
+  if (models.truck) {
+    const [tx, tz, trot] = TRUCK_SPOT;
+    const truck = normalizeProp(models.truck.scene.clone(true), 2.2);
+    truck.position.set(tx, groundHeightAt(tx, tz), tz);
+    truck.rotation.y = trot;
+    // Settled into the ground on decades of flat tyres, nose down.
+    truck.rotation.z = 0.04;
+    truck.rotation.x = -0.03;
+    truck.name = 'truck';
+    scene.add(truck);
   }
 
-  // Dead trees, reusing whichever tree model loaded.
-  const treeSrc = models.treeA?.scene ?? models.treeB?.scene ?? silhouette('tree');
-  place(scene, normalizeProp(treeSrc.clone(true), 7.5), swampTreeSpots());
+  // Dead cypress standing in the marsh. These used to be eight clones of ONE
+  // model — the most repetitive set in the scene. Now each is grown
+  // separately, taller and barer than the avenue oaks (less moss, longer
+  // strands) because a cypress standing in open water is a spindly thing next
+  // to a live oak. Exposed over the water they catch more wind.
+  if (models.oak) {
+    plantOaks(scene, models.oak.scene, swampTreeSpots(), {
+      height: 8.5,
+      seed: 0xdead7233,
+      // Standing in open water with nothing upwind, so they take more of it.
+      sway: { amount: 0.042, speed: 0.24 },
+      moss: 26,
+      mossLength: 2.4,
+      name: 'swampOak',
+    });
+  }
 }
 
-function place(scene, template, spots) {
+// Wind for a placed GLB prop, as opposed to the instanced grass/pines.
+//
+// Shares the uWind clock with applySway, so one gust crosses the grass, the
+// reeds, the treeline and these trees together — a scene where the ground
+// vegetation moves and the trees stand rigid reads as cardboard scenery, and
+// that mismatch was the loudest thing about the trees once the grass started
+// moving.
+//
+// Everything that varies per tree (its phase, where it stands, which way the
+// wind hits it) is a UNIFORM rather than a baked literal, so all the trees
+// share one compiled shader and only the tuning constants split the cache.
+export function applyTreeSway(root, {
+  amount = 0.028, speed = 0.17, rotY = 0, mirror = false,
+  origin = [0, 0], phase = 0, dir = [0.82, 0.57],
+} = {}) {
+  // The shader works in the mesh's own local space, which sits under this
+  // prop's Y rotation — so bending along a fixed local axis would turn the
+  // wind with each tree. Rotating the wind into local space on the CPU is
+  // free here (unlike the instanced case, which must do it per vertex).
+  const c = Math.cos(rotY);
+  const s = Math.sin(rotY);
+  let lx = dir[0] * c - dir[1] * s;
+  const lz = dir[0] * s + dir[1] * c;
+  if (mirror) lx = -lx; // a mirrored prop has a flipped local X axis
+  const travel = origin[0] * dir[0] + origin[1] * dir[1];
+
+  root.traverse((o) => {
+    if (!o.isMesh || !o.material) return;
+    const geo = o.geometry;
+    if (!geo.boundingBox) geo.computeBoundingBox();
+    const baseY = geo.boundingBox.min.y;
+    const spanY = Math.max(geo.boundingBox.max.y - baseY, 1e-4);
+
+    // Per tree, or every tree would share one phase and the wood would sway
+    // as a single object. Textures are shared by reference, so this costs
+    // nothing in memory.
+    const mat = o.material.clone();
+    o.material = mat;
+    mat.customProgramCacheKey = () => `treesway:${amount}:${speed}`;
+    mat.onBeforeCompile = (shader) => {
+      shader.uniforms.uWind = windUniforms.uWind;
+      shader.uniforms.uSwayDir = { value: new THREE.Vector2(lx, lz) };
+      shader.uniforms.uSwayPhase = { value: phase };
+      shader.uniforms.uSwayTravel = { value: travel };
+      shader.uniforms.uSwayBase = { value: baseY };
+      shader.uniforms.uSwaySpan = { value: spanY };
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', `#include <common>
+          uniform float uWind;
+          uniform vec2 uSwayDir;
+          uniform float uSwayPhase;
+          uniform float uSwayTravel;
+          uniform float uSwayBase;
+          uniform float uSwaySpan;`)
+        .replace('#include <begin_vertex>', `#include <begin_vertex>
+          {
+            // Height up the tree, from its own geometry, so this works for
+            // any model at any scale without being told how tall it is.
+            // (ASCII only in here: GLSL's source character set does not
+            // include punctuation like em-dashes, and strict drivers reject
+            // shaders containing them even inside comments.)
+            float h = clamp((transformed.y - uSwayBase) / uSwaySpan, 0.0, 1.0);
+            float t = uWind * ${speed.toFixed(3)} - uSwayTravel * 0.45 + uSwayPhase;
+            float gust = sin(t) + 0.35 * sin(t * 2.3 + 1.1);
+            float swell = 0.6 + 0.4 * sin(uWind * 0.11 - uSwayTravel * 0.08);
+            // Amount is a FRACTION OF THE TREE'S OWN HEIGHT, so a 6m tree
+            // and a 7.5m one move by proportionate amounts rather than by
+            // the same absolute distance.
+            float bend = h * h * gust * swell * ${amount.toFixed(4)} * uSwaySpan;
+            transformed.x += bend * uSwayDir.x;
+            transformed.z += bend * uSwayDir.y;
+          }`);
+    };
+    mat.needsUpdate = true;
+  });
+}
+
+// Mossy boulders scattered through the graveyard field.
+//
+// Deterministic and held clear of the road corridor and of the hand-placed
+// props, so a boulder never lands inside a gravestone or a tree trunk. Same
+// rejection-sampling shape as the grass and the reeds.
+// Is [px, pz] inside a closed polygon? Standard even-odd ray crossing.
+function pointInPolygon(px, pz, poly) {
+  let hit = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [xi, zi] = poly[i];
+    const [xj, zj] = poly[j];
+    if ((zi > pz) !== (zj > pz) && px < ((xj - xi) * (pz - zi)) / (zj - zi) + xi) hit = !hit;
+  }
+  return hit;
+}
+
+export function boulderSpots(count = 11) {
+  const rand = makeLcg(0xb01de3);
+  const samples = [];
+  for (let i = 0; i <= 90; i++) samples.push(positionAt(i / 90));
+  // Everything already standing in the field, with the radius each one needs
+  // kept clear. The truck's is much larger than a prop-centre distance would
+  // suggest because it is 6.2m long -- a boulder 1.1m from its origin sits
+  // inside the flatbed, which is exactly where one landed before this list
+  // included it.
+  const taken = [
+    ...PROP_SPOTS.graves.map(([x, z]) => [x, z, 2.2]),
+    ...PROP_SPOTS.trees.map(([x, z]) => [x, z, 2.2]),
+    ...WATCHER_SPOTS.map(([x, z]) => [x, z, 1.8]),
+    [TRUCK_SPOT[0], TRUCK_SPOT[1], 4.2],
+  ];
+  // The pools, computed once rather than per candidate.
+  const pools = POOLS.map(poolOutline);
+  const spots = [];
+  let guard = 0;
+  while (spots.length < count && guard < count * 60) {
+    guard += 1;
+    const x = (rand() - 0.5) * 24;
+    const z = 4 + rand() * 38;
+
+    let nearPath = Infinity;
+    for (const p of samples) nearPath = Math.min(nearPath, Math.hypot(p.x - x, p.z - z));
+    // A boulder is up to ~1.4m across, so 2.6m keeps it off the verge.
+    if (nearPath < 2.6) continue;
+    if (taken.some(([px, pz, r]) => Math.hypot(px - x, pz - z) < r)) continue;
+    if (spots.some(([px, pz]) => Math.hypot(px - x, pz - z) < 3)) continue;
+    // Keep them out of the water. A boulder is buried into the GROUND, but
+    // inside a pool the water surface hides the ground it is buried in, so
+    // the rock reads as floating on the pond -- which is exactly how 4 of
+    // these 11 looked. 1.6m of bank also stops the ones near an edge from
+    // having their waterline cut across them.
+    if (pools.some((poly) => pointInPolygon(x, z, poly))) continue;
+    if (pools.some((poly) => poly.some(([ex, ez]) => Math.hypot(ex - x, ez - z) < 1.6))) continue;
+
+    spots.push([
+      +x.toFixed(2), +z.toFixed(2),
+      +(rand() * Math.PI * 2).toFixed(2),
+      +(0.55 + rand() * 0.95).toFixed(2),
+    ]);
+  }
+  return spots;
+}
+
+// Samples anchor points off a tree's own FOLIAGE geometry, for hanging moss.
+//
+// Reading the real leaf-card vertices (rather than guessing coordinates from
+// the bounding box) means every strand starts on an actual branch, whatever
+// model is dropped in and however it is scaled. Only the upper canopy is
+// eligible: moss growing off the trunk at head height would read as seaweed.
+function foliageAnchors(root, {
+  count, rand, minHeightFrac = 0.45, maxRadius = Infinity, match = /branch|leaf|foliage/i,
+}) {
+  root.updateMatrixWorld(true);
+  const inverse = new THREE.Matrix4().copy(root.matrixWorld).invert();
+  const candidates = [];
+  const v = new THREE.Vector3();
+
+  root.traverse((o) => {
+    if (!o.isMesh) return;
+    const name = `${o.name} ${o.material?.name ?? ''}`;
+    if (!match.test(name)) return;
+    const pos = o.geometry.getAttribute('position');
+    // A leaf atlas can carry thousands of vertices; stepping through it is
+    // plenty and keeps this off the critical path at boot.
+    const stride = Math.max(1, Math.floor(pos.count / 400));
+    for (let i = 0; i < pos.count; i += stride) {
+      v.fromBufferAttribute(pos, i).applyMatrix4(o.matrixWorld).applyMatrix4(inverse);
+      candidates.push([v.x, v.y, v.z]);
+    }
+  });
+
+  if (!candidates.length) return [];
+  const top = Math.max(...candidates.map((c) => c[1]));
+  // Only the upper canopy, and only the part of it that is not reaching over
+  // the road: moss on a branch directly above the path would hang into the
+  // corridor the camera drives down however short the strand is trimmed.
+  const high = candidates.filter(
+    (c) => c[1] > top * minHeightFrac && Math.hypot(c[0], c[2]) < maxRadius,
+  );
+  const pool = high.length ? high : candidates.filter((c) => c[1] > top * minHeightFrac);
+  if (!pool.length) return [];
+
+  const picked = [];
+  for (let i = 0; i < count; i++) picked.push(pool[Math.floor(rand() * pool.length)]);
+  return picked;
+}
+
+// Plants the live oaks along the approach, and hangs Spanish moss on them.
+//
+// The oak is a real model (bark mesh + alpha-cut leaf cards, 7,112 triangles)
+// rather than the generated tree that used to stand here. Two things it does
+// NOT come with, which are added on top:
+//   - moss, which no general-purpose oak asset ships and which is the single
+//     most identifiable thing about a southern live oak;
+//   - wind, applied separately to the trunk and the leaves so the canopy
+//     moves against a comparatively stiff trunk instead of the whole tree
+//     rocking as one rigid body.
+function plantOaks(scene, template, spots, {
+  height = 7, seed = 0x7011, sway = { amount: 0.028, speed: 0.19 },
+  moss = 30, mossLength = 1.7, name = 'liveOak',
+} = {}) {
+  const rand = makeLcg(seed);
+
+  spots.forEach(([x, z, rotY, s = 1], i) => {
+    const treeHeight = height * s * (0.86 + rand() * 0.3);
+    const oak = normalizeProp(template.clone(true), treeHeight);
+    oak.position.set(x, groundHeightAt(x, z), z);
+    oak.rotation.y = rotY;
+    // A little lean, and a mirror on half of them: ten spots dressed from one
+    // model is otherwise ten identical trees in a row.
+    const mirror = rand() < 0.5;
+    if (mirror) oak.scale.x *= -1;
+    oak.rotation.x += (rand() - 0.5) * 0.07;
+    oak.rotation.z += (rand() - 0.5) * 0.07;
+    oak.name = name;
+
+    oak.traverse((o) => {
+      if (!o.isMesh || !o.material) return;
+      const mat = o.material.clone();
+      o.material = mat;
+      const isLeaf = /branch|leaf|foliage/i.test(`${o.name} ${mat.name ?? ''}`);
+
+      if (isLeaf) {
+        // The asset ships its foliage as alphaMode BLEND. Blended geometry
+        // has to be drawn back-to-front to composite correctly, and a canopy
+        // is thousands of mutually-intersecting cards that cannot be sorted
+        // into any correct order -- leaves flicker and vanish behind each
+        // other as the camera moves. MASK/alphaTest is order-independent,
+        // which is why it is what foliage is supposed to use.
+        mat.transparent = false;
+        mat.alphaTest = 0.5;
+        mat.depthWrite = true;
+        mat.side = THREE.DoubleSide;
+      }
+
+      // Leaves are lighter and catch far more wind than the trunk does.
+      applyTreeSway(o, {
+        amount: isLeaf ? sway.amount * 2.6 : sway.amount,
+        speed: sway.speed,
+        rotY,
+        mirror,
+        origin: [x, z],
+        phase: rand() * Math.PI * 2,
+      });
+    });
+
+    // Moss, hung off the oak's own leaf cards. How far out it may hang is
+    // derived from THIS tree's measured distance to the camera corridor, so
+    // a tree standing further back gets a fuller drape than one crowding the
+    // road, rather than every tree being trimmed to suit the closest one.
+    const clearance = minPathClearance([[x, z]]);
+    const anchors = foliageAnchors(oak, {
+      count: Math.round(moss * (0.7 + rand() * 0.6)),
+      rand,
+      minHeightFrac: 0.5,
+      maxRadius: Math.max(clearance - 1.5, 1),
+    });
+    if (anchors.length) {
+      const mossGeo = buildMossCurtains(anchors, {
+        seed: seed + i * 7919,
+        length: mossLength * (0.75 + rand() * 0.5),
+        totalHeight: treeHeight,
+      });
+      const mossMat = new THREE.MeshLambertMaterial({
+        color: '#ffffff', vertexColors: true, side: THREE.DoubleSide,
+      });
+      // Moss swings much further than either the leaves or the trunk.
+      applyBranchSway(mossMat, {
+        amount: sway.amount * 2.2, speed: sway.speed * 0.8, rotY, mirror, origin: [x, z],
+      });
+      const mossMesh = new THREE.Mesh(mossGeo, mossMat);
+      mossMesh.name = `${name}Moss`;
+      oak.add(mossMesh);
+    }
+
+    scene.add(oak);
+  });
+}
+
+// Places clones of a template at fixed spots.
+//
+// `vary` breaks up the repetition that comes of dressing ten spots from two
+// models: without it the approach is five identical trees down one side and
+// five identical trees down the other, distinguishable only by yaw, and the
+// eye picks that out immediately however good the model is.
+//   - mirroring flips the silhouette outright, which is the cheapest way to
+//     double the apparent number of distinct models (safe here: both tree
+//     GLBs are authored doubleSided).
+//   - independent height/width scaling turns one tree into a squat one and a
+//     lanky one.
+//   - a slight lean off plumb, which for the gravestones is not variation for
+//     its own sake but the Ghost-Rider reference itself.
+// `sink` buries the prop by a fraction of its own height.
+//
+// Needed for raw photogrammetry scans, which are OPEN SHELLS: a scanner never
+// sees an object's underside, so there is no bottom face at all. The mossy
+// stone has 1,939 boundary edges out of 6,650 and no base whatsoever, so
+// resting it on y=0 shows straight into the hollow, and the `vary` tilt lifts
+// one edge and exposes more of it. Burying the ragged part is also simply
+// what a rock in a field looks like — half in the ground, not set on top of
+// it. Measured from the object's real transformed bounding box rather than
+// its nominal height, so per-spot and `vary` scaling are already accounted
+// for.
+function place(scene, template, spots, {
+  vary = false, sway = null, seed = 0x5ca1ab1e, sink = 0,
+} = {}) {
+  const rand = makeLcg(seed);
   for (const [x, z, rotY, s] of spots) {
     const obj = template.clone(true);
-    obj.position.set(x, 0, z);
+    // On the terrain, not at y=0. The ground dips into a basin under each
+    // pond, and a prop pinned to zero hovers over the hollow -- which is
+    // exactly how the gravestones and rocks near the water ended up floating.
+    obj.position.set(x, groundHeightAt(x, z), z);
     obj.rotation.y = rotY;
     obj.scale.multiplyScalar(s);
+
+    let mirror = false;
+    if (vary) {
+      mirror = rand() < 0.5;
+      const tall = 0.86 + rand() * 0.34;
+      const wide = 0.86 + rand() * 0.3;
+      obj.scale.x *= wide * (mirror ? -1 : 1);
+      obj.scale.y *= tall;
+      obj.scale.z *= wide;
+      obj.rotation.x += (rand() - 0.5) * 0.1;
+      obj.rotation.z += (rand() - 0.5) * 0.1;
+
+      // A negative scale flips triangle winding, so every front face becomes
+      // a back face. The tree GLBs are authored doubleSided and survive that,
+      // but the gravestones are not — mirrored, they would render inside-out
+      // (front faces culled, lit by inverted normals). DoubleSide costs one
+      // material clone on a handful of props and makes mirroring safe for
+      // whatever model is dropped in here later.
+      if (mirror) {
+        obj.traverse((o) => {
+          if (!o.isMesh || !o.material) return;
+          o.material = o.material.clone();
+          o.material.side = THREE.DoubleSide;
+        });
+      }
+    }
+
+    if (sway) {
+      applyTreeSway(obj, {
+        ...sway,
+        rotY,
+        mirror,
+        origin: [x, z],
+        phase: rand() * Math.PI * 2,
+      });
+    }
+
+    if (sink > 0) {
+      obj.updateMatrixWorld(true);
+      const box = new THREE.Box3().setFromObject(obj);
+      const height = box.max.y - box.min.y;
+      // Vary how deep each one sits: a row of rocks all buried to exactly the
+      // same fraction reads as a repeated object, which is the same tell the
+      // trees had. Measured down from the TERRAIN rather than from y=0, so a
+      // rock on a pool's bank is buried into the slope instead of hanging
+      // above it.
+      obj.position.y -= height * sink * (0.75 + rand() * 0.5);
+    }
+
     scene.add(obj);
   }
 }
@@ -804,26 +1877,32 @@ export function buildWorld({ scene, models, grassCount = 0, tier = 'high' }) {
   scene.add(sky);
 
   // Ground: a big dark disc; fog swallows the edge.
+  //
+  // Tessellated as a radial grid rather than a bare CircleGeometry, because
+  // it now has to CARRY the pool basins. A flat plane with a water quad on
+  // top gives a shoreline with nothing behind it; dishing the terrain under
+  // each pool is what puts a visible bank between the field and the water,
+  // which is the cue that was missing. Rings are packed tightly out to ~50m
+  // (where everything the camera passes actually is) and coarsely beyond.
   const ground = new THREE.Mesh(
-    new THREE.CircleGeometry(90, 48),
+    buildGroundGeometry(),
     // ACES Filmic tone mapping crushes low-albedo colors hard toward black
     // (its shadow "toe"), so a ground plane dark enough to look right on
     // paper renders as near-invisible once lit and tone-mapped — bumped
     // notably lighter than a literal dead-grass color would suggest so it
-    // actually reads under the moon/hemisphere lighting. DoubleSide as a
-    // safety net: `rotation.x = Math.PI / 2` below was previously the
-    // negated sign, which (verified via the mesh's actual world matrix)
-    // left the disc's normal facing *down* — invisible to every camera in
-    // the scene, since they all sit above y=0. That's the root cause the
-    // ground (and the dirt road riding on top of it) never showed up in
-    // any screenshot regardless of light/exposure tuning.
+    // actually reads under the moon/hemisphere lighting. DoubleSide is kept
+    // as a safety net: an earlier version built this from a CircleGeometry
+    // rotated into place and had the sign of that rotation wrong, leaving the
+    // disc's normal facing down and the ground invisible to every camera in
+    // the scene. It is now built directly in the XZ plane with real computed
+    // normals, so there is no rotation left to get wrong.
     new THREE.MeshStandardMaterial({ color: '#3a4132', roughness: 1, side: THREE.DoubleSide }),
   );
-  ground.rotation.x = Math.PI / 2;
+  ground.name = 'ground';
   scene.add(ground);
 
   buildRoad(scene);
-  buildGrass(scene, grassCount);
+  buildGrass(scene, grassCount, tier);
   buildSwamp(scene, models, tier);
   buildBackdrop(scene, tier);
   const rose = buildWindowGlow(scene);
@@ -1008,21 +2087,67 @@ export function buildWorld({ scene, models, grassCount = 0, tier = 'high' }) {
   doorGlow.position.set(0, 1.8, -2.9);
   scene.add(doorGlow);
 
-  // Set dressing, real GLB or silhouette.
+  // Set dressing, real GLB or silhouette. Trees are no longer among them —
+  // they come from oak.glb now, so tree-a.glb and tree-b.glb are not fetched
+  // at all any more.
   const grave = models.gravestoneA?.scene ?? silhouette('grave');
   const graveB = models.gravestoneB?.scene ?? silhouette('graveb');
-  const tree = models.treeA?.scene ?? silhouette('tree');
-  const treeB = models.treeB?.scene ?? silhouette('tree');
   // Low tier (likely mobile): thin the heaviest set dressing to ~60% of
   // spots, keeping the ones nearest the path so the visible corridor still
   // reads as dressed. High tier keeps every PROP_SPOTS entry unchanged.
   const graveSpots = tier === 'low' ? nearestToPath(PROP_SPOTS.graves, 0.6) : PROP_SPOTS.graves;
   const treeSpots = tier === 'low' ? nearestToPath(PROP_SPOTS.trees, 0.6) : PROP_SPOTS.trees;
   const half = Math.ceil(graveSpots.length / 2);
-  place(scene, normalizeProp(grave, 1.1), graveSpots.slice(0, half));
-  place(scene, normalizeProp(graveB, 1.3), graveSpots.slice(half));
-  place(scene, normalizeProp(tree, 6), treeSpots.filter((_, i) => i % 2 === 0));
-  place(scene, normalizeProp(treeB, 7), treeSpots.filter((_, i) => i % 2 === 1));
+  // Stones lean, but they do not sway — they are stone.
+  place(scene, normalizeProp(grave, 1.1), graveSpots.slice(0, half), { vary: true, seed: 0x51a1 });
+  place(scene, normalizeProp(graveB, 1.3), graveSpots.slice(half), { vary: true, seed: 0x51a2 });
+  // Mossy boulders through the field, breaking up ground that is otherwise
+  // flat between the markers.
+  if (models.boulder) {
+    place(scene, normalizeProp(models.boulder.scene, 1.05), boulderSpots(), {
+      vary: true,
+      seed: 0xb01de3,
+      // The scan has no underside at all, so a third of it goes under.
+      sink: 0.34,
+    });
+  }
+
+  // The watchers: figures standing motionless back among the trees. Placed
+  // last among the set dressing so nothing else can be positioned relative to
+  // them by accident. They carry no animation and no update loop — the
+  // lightning does all the work (see WATCHER_SPOTS).
+  if (models.watcher) {
+    for (const [wx, wz, wrot] of WATCHER_SPOTS) {
+      const watcher = normalizeProp(models.watcher.scene.clone(true), 1.78);
+      watcher.position.set(wx, groundHeightAt(wx, wz), wz);
+      watcher.rotation.y = wrot;
+      watcher.name = 'watcher';
+      watcher.traverse((o) => {
+        if (!o.isMesh || !o.material) return;
+        const mat = o.material.clone();
+        o.material = mat;
+        // Sunk toward the dark so they are barely there under moonlight and
+        // it is the strike that picks them out. Left brighter, the figures
+        // would simply be three people standing in a field.
+        mat.color?.multiplyScalar(0.4);
+        o.material = mat;
+      });
+      scene.add(watcher);
+    }
+  }
+
+  // The avenue: moss-draped live oaks. If oak.glb is missing the approach
+  // simply has no trees rather than falling back to a shape that reads worse
+  // than nothing — every other prop here degrades the same way.
+  if (models.oak) {
+    plantOaks(scene, models.oak.scene, treeSpots, {
+      height: 7,
+      seed: 0x77ee01,
+      sway: { amount: 0.028, speed: 0.19 },
+      moss: 34,
+      mossLength: 1.7,
+    });
+  }
 
   // Altar anchor: where the cross + altar light mount, on the chapel's own
   // interior back wall (just in front of it, facing the aisle) rather than a

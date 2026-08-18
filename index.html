@@ -2,19 +2,80 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>prodfish — beats</title>
-  <meta name="description" content="prodfish. beats from the dark south." />
+  <!-- viewport-fit=cover lets the scene fill past the notch; the fixed
+       controls claim their clearance back via env(safe-area-inset-*). -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>prodfish — beats from the dark south</title>
+  <meta name="description" content="prodfish. beats from the dark south. Production credits, catalog and custom work." />
+  <link rel="canonical" href="https://prodfish.com/" />
+  <meta name="theme-color" content="#050607" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="prodfish" />
+  <meta property="og:title" content="prodfish — beats from the dark south" />
+  <meta property="og:description" content="beats from the dark south. Production credits, catalog and custom work." />
+  <meta property="og:url" content="https://prodfish.com/" />
+  <meta property="og:image" content="https://prodfish.com/og.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="prodfish — beats from the dark south" />
+  <meta name="twitter:description" content="beats from the dark south. Production credits, catalog and custom work." />
+  <meta name="twitter:image" content="https://prodfish.com/og.png" />
+
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;1,400&family=IBM+Plex+Mono:wght@300;400&family=UnifrakturMaguntia&display=swap" rel="stylesheet" />
+  <!-- UnifrakturMaguntia renders exactly four glyphs on this site, so it is
+       requested with `&text=fish` — a ~40KB webfont reduced to a few hundred
+       bytes. It is split into its own request because a `text=` subset cannot
+       be combined with full families in one css2 call. -->
+  <link href="https://fonts.googleapis.com/css2?family=UnifrakturMaguntia&text=fish&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;1,400&family=IBM+Plex+Mono:wght@300;400&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/src/style.css" />
+
+  <!-- The chapel is 4.2MB and is the one model the scene cannot open without.
+       Without this hint its download does not begin until the ~800KB module
+       graph has been fetched, parsed and executed; preloading starts it
+       during HTML parse instead, off the critical path entirely. crossorigin
+       is required for the hint to match the loader's own CORS-mode fetch —
+       without it the file is downloaded twice. -->
+  <link rel="preload" href="/models/church.glb" as="fetch" type="model/gltf-binary" crossorigin />
+  <link rel="preload" href="/draco/draco_decoder.wasm" as="fetch" type="application/wasm" crossorigin />
+
+  <!-- #loading is only ever cleared by JS adding .ready to <body>, and
+       .no-webgl is likewise set from JS. With scripting off neither happens,
+       so the page sat on a black screen forever. This lays the document out
+       statically instead.
+       The credits list and the bio are injected from src/content/portfolio.js
+       at runtime (the carved stones along the approach read from the same
+       source, so the two cannot drift), which means those two panels are
+       genuinely empty without JS and are hidden rather than shown as bare
+       headings. The BeatStars player and the contact address are static
+       markup and work fine, so the page still does its main job. -->
+  <noscript>
+    <style>
+      #loading, #scene, #blackout, #skip, #sound, #volume-row { display: none !important; }
+      #hero { position: relative; height: 100dvh; }
+      #scroll-track { height: auto; }
+      #chapel { position: relative; opacity: 1; pointer-events: auto;
+                background: radial-gradient(ellipse at 50% 30%, #2b0402, #0d0100 75%); }
+      .panel { max-height: none; overflow: visible; }
+      .panel-strip { display: block; }
+      .panel-arrow, .panel-dots { display: none; }
+      #panel-work, #panel-about .work-bio, #panel-about .work-socials { display: none; }
+    </style>
+  </noscript>
 </head>
 <body>
   <canvas id="scene"></canvas>
   <div id="glow" aria-hidden="true"></div>
   <div id="blackout" aria-hidden="true"></div>
-  <div id="loading" aria-hidden="true"><span>entering&hellip;</span></div>
+  <div id="loading" aria-hidden="true">
+    <span>entering&hellip;</span>
+    <span class="load-bar"><span class="load-bar-fill"></span></span>
+  </div>
   <button id="sound" type="button" aria-pressed="false" aria-label="turn ambient sound on">
     <span class="sound-mark" aria-hidden="true">&#9834;</span><span class="sound-word">sound</span>
   </button>
@@ -29,6 +90,12 @@
     <h1>fish</h1>
     <p class="hint">scroll<span class="hint-arrow">▾</span></p>
   </header>
+
+  <!-- The journey is sixteen screens long. On a phone that is a lot of thumb
+       for anyone who came for the catalog, so there is always a way straight
+       to it. Kept out of #hero because #hero is pointer-events: none and
+       fades out on scroll; this stays reachable for the whole approach. -->
+  <a id="skip" href="#chapel">skip to the beats</a>
 
   <main id="scroll-track">
     <section id="chapel">

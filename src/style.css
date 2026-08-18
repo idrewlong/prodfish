@@ -6,6 +6,11 @@
   --serif: "Cormorant Garamond", serif;
   --mono: "IBM Plex Mono", monospace;
   --blackletter: "UnifrakturMaguntia", serif;
+  /* Clearance for the notch and, more importantly on iPhone, the Safari
+     bottom toolbar and home indicator. Zero everywhere that has neither. */
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  --safe-r: env(safe-area-inset-right, 0px);
+  --safe-l: env(safe-area-inset-left, 0px);
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -16,6 +21,9 @@ body {
   color: var(--bone);
   font-family: var(--mono);
   overflow-x: hidden;
+  /* iOS shows a grey flash on every tap target otherwise, which reads as a
+     rendering fault against a scene this dark. */
+  -webkit-tap-highlight-color: transparent;
 }
 
 #scene {
@@ -54,14 +62,34 @@ body {
   inset: 0;
   z-index: 5;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 1.6rem;
   background: #000;
   font-size: 0.7rem;
   letter-spacing: 0.5em;
   text-transform: uppercase;
-  color: rgba(216, 211, 200, 0.4);
+  color: rgba(216, 211, 200, 0.55);
   transition: opacity 0.9s ease;
+}
+/* ~7MB of models is a long wait on a phone, and an unmoving word reads as a
+   hung page rather than a loading one. */
+.load-bar {
+  display: block;
+  width: min(220px, 50vw);
+  height: 1px;
+  background: rgba(216, 211, 200, 0.18);
+  overflow: hidden;
+}
+.load-bar-fill {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: var(--blood);
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform 0.3s ease-out;
 }
 body.ready #loading { opacity: 0; pointer-events: none; }
 .reduced #loading, .no-webgl #loading { display: none; }
@@ -105,12 +133,12 @@ body.ready #loading { opacity: 0; pointer-events: none; }
 
 #scroll-track {
   position: relative;
-  /* Kept in sync with JOURNEY_VH in src/journey.js, which boot() applies
-     over the top -- this is only the pre-boot default. If the two disagree
-     the journey either runs out before the beats or never finishes.
-     600vh made the whole descent (and especially the door approach) feel
-     rushed; 1000vh gives each act room to breathe without touching a
-     single act boundary in choreography.js. */
+  /* Pre-boot default only: boot() replaces this with an explicit PIXEL
+     height off the same frozen basis the timeline spans (see journey.js).
+     It must not stay in `vh` -- on iOS Safari `vh` means the toolbar-hidden
+     viewport while the timeline's `innerHeight` means the toolbar-shown one,
+     and the two-screen gap between them was left as dead scroll after the
+     journey had already ended. */
   height: 1600vh;
   z-index: 4;
   /* fix-round: this element spans the FULL document height at z-index 4,
@@ -129,13 +157,19 @@ body.ready #loading { opacity: 0; pointer-events: none; }
   bottom: 0;
   left: 0;
   width: 100%;
-  min-height: 100vh;
+  /* dvh, not vh: on iOS `100vh` is the toolbar-RETRACTED height, so a
+     `100vh` block is always taller than what the visitor can actually see
+     while the toolbar is up. dvh tracks the live viewport. */
+  min-height: 100dvh;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 2rem;
   padding: 2rem 1.5rem;
+  padding-bottom: calc(2rem + var(--safe-b));
+  padding-left: calc(1.5rem + var(--safe-l));
+  padding-right: calc(1.5rem + var(--safe-r));
   /* fix-round: #chapel sits in normal document flow at the bottom of the
      #scroll-track (see height above), so it starts sliding into the fixed viewport
      purely from its own height vs. the track's total height -- independent
@@ -220,7 +254,10 @@ body.ready #loading { opacity: 0; pointer-events: none; }
 .contact {
   font-size: 0.78rem;
   letter-spacing: 0.12em;
-  color: rgba(216, 211, 200, 0.5);
+  /* Every rgba(bone) alpha on this page was measured against the #050607
+     backdrop: 0.55 is exactly where body text clears WCAG's 4.5:1, and
+     anything at or below 0.5 (this was 0.5) does not. */
+  color: rgba(216, 211, 200, 0.55);
 }
 .contact a { color: rgba(216, 211, 200, 0.8); }
 
@@ -229,19 +266,22 @@ body.ready #loading { opacity: 0; pointer-events: none; }
   font-size: 0.65rem;
   letter-spacing: 0.3em;
   text-transform: uppercase;
-  color: rgba(216, 211, 200, 0.25);
+  /* Was 0.25 -- a 1.76:1 ratio, effectively invisible. This block is also
+     where the CC-BY attribution for the church and crow models lives, so it
+     is not decorative text that can be left to fade out. */
+  color: rgba(216, 211, 200, 0.55);
 }
 .chapel-footer a {
   color: inherit;
   text-decoration: underline;
-  text-decoration-color: rgba(216, 211, 200, 0.3);
+  text-decoration-color: rgba(216, 211, 200, 0.5);
   text-underline-offset: 2px;
 }
-.chapel-footer a:hover { color: rgba(216, 211, 200, 0.5); }
+.chapel-footer a:hover { color: rgba(216, 211, 200, 0.85); }
 
 /* ---------- reduced motion: static composed page ---------- */
 .reduced #blackout { opacity: 0; }
-.reduced #hero { position: relative; height: 100vh; }
+.reduced #hero { position: relative; height: 100dvh; }
 .reduced #scroll-track { height: auto; }
 .reduced #chapel {
   position: relative;
@@ -261,7 +301,7 @@ body.ready #loading { opacity: 0; pointer-events: none; }
 .no-webgl { background: var(--night); }
 .no-webgl #hero {
   position: relative;
-  height: 100vh;
+  height: 100dvh;
   background:
     radial-gradient(ellipse 60% 40% at 50% 68%, rgba(185, 178, 162, 0.14), transparent 70%),
     linear-gradient(#04060a, #10130f);
@@ -282,14 +322,28 @@ body.ready #loading { opacity: 0; pointer-events: none; }
    whole catalog and bio are in the page for keyboard, screen readers and
    search — no hidden duplicate section needed. */
 .panels { position: relative; width: min(760px, 94vw); }
-.panel-viewport { overflow: hidden; }
+.panel-viewport {
+  overflow: hidden;
+  /* Tells the browser up front that only vertical panning belongs to it.
+     Without this, Safari spends the first frames of every horizontal drag
+     deciding whether it is a page scroll, then fires pointercancel and the
+     swipe is lost -- see the pointercancel handler in panels.js. */
+  touch-action: pan-y;
+}
 .panel-strip {
   display: flex;
   transition: transform 0.55s cubic-bezier(0.22, 0.61, 0.36, 1);
 }
 .panel {
   flex: 0 0 100%;
-  max-height: 74vh;
+  /* A cap keeps the carousel from resizing as panels change, but it must
+     never put content out of reach: `.panel-viewport` clips overflow, so
+     anything past this height was previously cut off with no way to scroll
+     to it -- which on a short phone screen swallowed the end of the bio.
+     The panel itself is now the scroll container. */
+  max-height: 74dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   min-width: 100%;
   display: flex;
   flex-direction: column;
@@ -297,6 +351,8 @@ body.ready #loading { opacity: 0; pointer-events: none; }
   gap: 1.4rem;
   padding: 0 0.5rem;
 }
+.panel::-webkit-scrollbar { width: 3px; }
+.panel::-webkit-scrollbar-thumb { background: rgba(193, 23, 15, 0.5); }
 .panel[aria-hidden='true'] { visibility: hidden; }
 
 .panel-arrow {
@@ -324,12 +380,14 @@ body.ready #loading { opacity: 0; pointer-events: none; }
   background: none;
   border: 0;
   border-bottom: 1px solid transparent;
-  color: rgba(216, 211, 200, 0.35);
+  color: rgba(216, 211, 200, 0.55);
   font-family: var(--mono);
   font-size: 0.62rem;
   letter-spacing: 0.28em;
   text-transform: uppercase;
-  padding: 0 0 3px;
+  /* 44px of touch target regardless of how small the label renders. */
+  padding: 0.6rem 0.35rem;
+  min-height: 44px;
   cursor: pointer;
   transition: color 0.25s, border-color 0.25s;
 }
@@ -338,20 +396,17 @@ body.ready #loading { opacity: 0; pointer-events: none; }
   border-bottom-color: var(--blood);
 }
 
-/* The catalog is expected to grow well past ten entries, so the list
-   scrolls inside a fixed-height panel rather than growing the panel until
-   its heading is pushed off the top of the screen. */
+/* The catalog is expected to grow well past ten entries. It used to carry
+   its own max-height and scrollbar, which nested a scroller inside the
+   panel's — two scroll areas fighting for the same drag on a touchscreen.
+   The panel above is the single scroll container now; the list just grows. */
 .work-list {
   list-style: none;
   display: flex;
   flex-direction: column;
   gap: 0.9rem;
-  max-height: 46vh;
-  overflow-y: auto;
   padding-right: 0.5rem;
 }
-.work-list::-webkit-scrollbar { width: 3px; }
-.work-list::-webkit-scrollbar-thumb { background: rgba(193, 23, 15, 0.5); }
 .work-list a {
   color: rgba(216, 211, 200, 0.85);
   text-decoration: none;
@@ -367,7 +422,7 @@ body.ready #loading { opacity: 0; pointer-events: none; }
   font-size: 0.62rem;
   letter-spacing: 0.28em;
   text-transform: uppercase;
-  color: rgba(216, 211, 200, 0.45);
+  color: rgba(216, 211, 200, 0.6);
 }
 .work-bio {
   max-width: 34rem;
@@ -377,14 +432,16 @@ body.ready #loading { opacity: 0; pointer-events: none; }
   color: rgba(216, 211, 200, 0.8);
   text-align: center;
 }
-.work-socials { display: flex; gap: 2.2rem; }
+.work-socials { display: flex; gap: 2.2rem; flex-wrap: wrap; justify-content: center; }
 .work-socials a {
-  color: rgba(216, 211, 200, 0.55);
+  color: rgba(216, 211, 200, 0.6);
   font-family: var(--mono);
   font-size: 0.72rem;
   letter-spacing: 0.3em;
   text-transform: uppercase;
   text-decoration: none;
+  /* Touch target, not just text. */
+  padding: 0.5rem 0;
 }
 .work-socials a:hover { color: var(--bone); }
 
@@ -399,20 +456,26 @@ body.ready #loading { opacity: 0; pointer-events: none; }
    close. */
 #sound {
   position: fixed;
-  right: 1.1rem;
-  bottom: 1.1rem;
+  /* On an iPhone the Safari toolbar and home indicator occupy the bottom of
+     the viewport, and a bare `bottom: 1.1rem` put this control underneath
+     them -- unreachable. --safe-b is 0 on every device without one. */
+  right: calc(1.1rem + var(--safe-r));
+  bottom: calc(1.1rem + var(--safe-b));
   z-index: 7;
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 0.5rem;
-  background: rgba(8, 7, 6, 0.5);
-  border: 1px solid rgba(216, 211, 200, 0.2);
-  color: rgba(216, 211, 200, 0.5);
+  background: rgba(8, 7, 6, 0.6);
+  border: 1px solid rgba(216, 211, 200, 0.3);
+  color: rgba(216, 211, 200, 0.6);
   font-family: var(--mono);
   font-size: 0.6rem;
   letter-spacing: 0.3em;
   text-transform: uppercase;
   padding: 0.5rem 0.8rem;
+  min-height: 44px;
+  min-width: 44px;
   cursor: pointer;
   transition: color 0.3s, border-color 0.3s;
 }
@@ -426,8 +489,9 @@ body.ready #loading { opacity: 0; pointer-events: none; }
    which way is quieter without needing a label. */
 #volume-row {
   position: fixed;
-  right: 1.1rem;
-  bottom: 4.6rem;
+  right: calc(1.1rem + var(--safe-r));
+  /* Stacked above #sound, which is itself lifted clear of the safe area. */
+  bottom: calc(5.2rem + var(--safe-b));
   z-index: 7;
   display: flex;
   align-items: center;
@@ -441,15 +505,18 @@ body.sound-on #volume-row { opacity: 1; pointer-events: auto; }
   font-family: var(--mono);
   font-size: 0.8rem;
   line-height: 1;
-  color: rgba(216, 211, 200, 0.45);
+  color: rgba(216, 211, 200, 0.6);
   user-select: none;
 }
 #volume {
   width: 5.6rem;
   height: 2px;
   appearance: none;
-  background: rgba(216, 211, 200, 0.25);
+  background: rgba(216, 211, 200, 0.3);
   cursor: pointer;
+  /* A range input inside a vertically-scrolling page: without this, dragging
+     the thumb on a touchscreen scrolls the page instead. */
+  touch-action: none;
 }
 #volume::-webkit-slider-thumb {
   appearance: none;
@@ -467,3 +534,46 @@ body.sound-on #volume-row { opacity: 1; pointer-events: auto; }
   background: var(--bone);
 }
 #volume:focus-visible { outline: 1px solid var(--blood); outline-offset: 5px; }
+
+/* Fingers are not mice: the 11px thumb above is precise enough to aim with a
+   cursor and far too small to catch on a touchscreen. */
+@media (pointer: coarse) {
+  #volume { width: 6.5rem; height: 16px; background: none; }
+  #volume::-webkit-slider-runnable-track {
+    height: 2px;
+    background: rgba(216, 211, 200, 0.3);
+  }
+  #volume::-webkit-slider-thumb { width: 18px; height: 18px; margin-top: -8px; }
+  #volume::-moz-range-track { height: 2px; background: rgba(216, 211, 200, 0.3); }
+  #volume::-moz-range-thumb { width: 18px; height: 18px; }
+}
+
+/* ---------- skip to the beats ---------- */
+/* Sixteen screens of scroll is the point of the site, but it should never be
+   a toll gate in front of the catalog. This sits opposite the sound control
+   for the whole approach and retires once the altar is reached. */
+#skip {
+  position: fixed;
+  left: calc(1.1rem + var(--safe-l));
+  bottom: calc(1.1rem + var(--safe-b));
+  z-index: 7;
+  display: flex;
+  align-items: center;
+  background: rgba(8, 7, 6, 0.6);
+  border: 1px solid rgba(216, 211, 200, 0.3);
+  color: rgba(216, 211, 200, 0.6);
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  text-decoration: none;
+  padding: 0.5rem 0.8rem;
+  min-height: 44px;
+  transition: color 0.3s, border-color 0.3s, opacity 0.5s;
+}
+#skip:hover, #skip:focus-visible { color: var(--bone); border-color: var(--blood); }
+/* Hidden once the visitor has actually arrived — main.js adds .arrived. */
+body.arrived #skip { opacity: 0; pointer-events: none; }
+/* The static paths lay the whole page out in flow, so the browser's own
+   in-page anchor jump is all that is needed and the control is redundant. */
+.reduced #skip, .no-webgl #skip { display: none; }
