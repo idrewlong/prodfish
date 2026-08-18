@@ -25,6 +25,36 @@
   <meta name="twitter:description" content="beats from the dark south. Production credits, catalog and custom work." />
   <meta name="twitter:image" content="https://prodfish.com/og.png" />
 
+  <!-- Structured data. Deliberately minimal: every field is one a search
+       engine can verify against the visible page, because structured data
+       that claims more than the document shows is worse than none at all.
+       `sameAs` is how Google ties this domain to the profiles as one entity,
+       so it must stay in step with SOCIALS in src/content/portfolio.js —
+       which renders the same two links into the about panel. It is written
+       out statically rather than injected by main.js because crawlers treat
+       markup in the served HTML as far more reliable than markup a script
+       adds afterwards.
+       Still missing, and only because the data is still PLACEHOLDER: the
+       catalog as `track`/`byArtist` entries generated from CREDITS, the way
+       the panel and the carved stones already are. -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "MusicGroup",
+    "@id": "https://prodfish.com/#prodfish",
+    "name": "prodfish",
+    "url": "https://prodfish.com/",
+    "description": "beats from the dark south. Production credits, catalog and custom work.",
+    "genre": "Hip Hop",
+    "image": "https://prodfish.com/og.png",
+    "email": "beats@prodfish.com",
+    "sameAs": [
+      "https://www.instagram.com/prodfish/",
+      "https://x.com/prodfish"
+    ]
+  }
+  </script>
+
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <!-- UnifrakturMaguntia renders exactly four glyphs on this site, so it is
@@ -35,13 +65,50 @@
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;1,400&family=IBM+Plex+Mono:wght@300;400&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/src/style.css" />
 
-  <!-- The chapel is 4.2MB and is the one model the scene cannot open without.
-       Without this hint its download does not begin until the ~800KB module
-       graph has been fetched, parsed and executed; preloading starts it
+  <!-- The chapel is the one model the scene cannot open without, and it ships
+       in two cuts: 4.2MB with 2048px maps, and a 1.7MB mobile variant capped
+       at 1024px (see MOBILE_VARIANTS in scripts/build-assets.mjs). They are
+       the same meshes and node names, so nothing downstream knows or cares
+       which one arrived.
+
+       Without a preload hint the download does not begin until the ~800KB
+       module graph has been fetched, parsed and executed; this starts it
        during HTML parse instead, off the critical path entirely. crossorigin
        is required for the hint to match the loader's own CORS-mode fetch —
-       without it the file is downloaded twice. -->
-  <link rel="preload" href="/models/church.glb" as="fetch" type="model/gltf-binary" crossorigin />
+       without it the file is downloaded twice.
+
+       Which is exactly why the choice cannot be a static tag. A hint for the
+       desktop model on a phone would not merely be a wasted hint, it would
+       pull the whole 4.2MB down alongside the 1.7MB the loader actually
+       wants — the precise devices this variant exists to help, paying double.
+       So the decision is made here, once, in a classic inline script (which
+       runs during parse, unlike a deferred module), and published on
+       window.__CHURCH__ for main.js to read back. One decision, one URL, no
+       way for the hint and the fetch to disagree.
+
+       The predicate is deviceTier()'s from src/device.js. It is repeated
+       rather than imported because a module import would forfeit the parse-
+       time head start that is the entire point; tests/church-variant.test.js
+       runs this exact script against the same inputs as deviceTier() and
+       fails if the two ever drift apart. -->
+  <script>
+    (function () {
+      var ua = navigator.userAgent;
+      var mobileUA = /Mobi|Android|iPhone|iPad/i.test(ua)
+        || (/Macintosh/i.test(ua) && navigator.maxTouchPoints > 1);
+      var low = mobileUA
+        || (navigator.deviceMemory !== undefined && navigator.deviceMemory <= 4)
+        || (navigator.hardwareConcurrency !== undefined && navigator.hardwareConcurrency <= 4);
+      window.__CHURCH__ = low ? '/models/church-mobile.glb' : '/models/church.glb';
+      var link = document.createElement('link');
+      link.rel = 'preload';
+      link.as = 'fetch';
+      link.type = 'model/gltf-binary';
+      link.crossOrigin = 'anonymous';
+      link.href = window.__CHURCH__;
+      document.head.appendChild(link);
+    })();
+  </script>
   <link rel="preload" href="/draco/draco_decoder.wasm" as="fetch" type="application/wasm" crossorigin />
 
   <!-- The player is a third-party origin, so its first byte is behind a DNS
@@ -74,7 +141,14 @@
                 background: radial-gradient(ellipse at 50% 30%, #2b0402, #0d0100 75%); }
       .panel { max-height: none; overflow: visible; }
       .panel-strip { display: block; }
-      .panel-arrow, .panel-dots { display: none; }
+      /* The whole nav cluster goes: with no JS the strip is laid out as
+         stacked blocks, so there is nothing left to page between. */
+      .panel-nav { display: none; }
+      /* The fallback is only ever revealed by .player-pending, which JS adds.
+         Without JS the iframe is opaque and on top, so this would be dead
+         weight sitting behind it — but hide it outright rather than trusting
+         the stacking, since .panel here is `overflow: visible`. */
+      .player-fallback { display: none; }
       #panel-work, #panel-about .work-bio, #panel-about .work-socials { display: none; }
     </style>
   </noscript>
@@ -122,15 +196,27 @@
   <main id="scroll-track">
     <section id="chapel">
       <div class="panels" role="group" aria-roledescription="carousel" aria-label="beats, credits and about">
-        <button class="panel-arrow panel-prev" type="button" aria-label="previous">&#8249;</button>
-        <button class="panel-arrow panel-next" type="button" aria-label="next">&#8250;</button>
-
         <div class="panel-viewport">
           <div class="panel-strip">
 
             <article class="panel" id="panel-beats" aria-label="beats">
               <h2 class="chapel-title">the beats</h2>
+              <!-- The player is a third-party embed on a slow, blockable
+                   origin, and it was framing 560px of pure black while it
+                   arrived — indistinguishable from a broken site. The
+                   fallback below sits behind it and says so.
+
+                   The iframe is opaque and visible by DEFAULT so the no-JS
+                   page is unaffected. main.js adds .player-pending, which
+                   makes the frame transparent and reveals the message, then
+                   removes it on the iframe's load event. If that event never
+                   comes — blocked, offline, bad store id — the message stays
+                   put instead of the void. -->
               <div class="altar-frame">
+                <p class="player-fallback" aria-hidden="true">
+                  <span class="player-fallback-line">the player is on its way</span>
+                  <span class="player-fallback-sub">if it never arrives, the catalog is one door over</span>
+                </p>
                 <iframe
                   src="https://player.beatstars.com/?storeId=PLACEHOLDER"
                   title="prodfish beats on BeatStars"
@@ -145,6 +231,9 @@
 
             <article class="panel" id="panel-work" aria-label="the work">
               <h2 class="chapel-title">the work</h2>
+              <!-- A ledger, not a list: artist left, track right, one rule
+                   between. Rows are links only where a real Spotify URL
+                   exists — see creditRow() in main.js. -->
               <ul class="work-list"></ul>
               <a class="bs-link work-catalog" target="_blank" rel="noopener">the full catalog &#8599;</a>
             </article>
@@ -154,14 +243,24 @@
               <p class="work-bio"></p>
               <nav class="work-socials" aria-label="social links"></nav>
               <p class="contact">
-                custom work &mdash; <a href="mailto:beats@prodfish.com">beats@prodfish.com</a>
+                <span class="contact-label">custom work</span>
+                <a class="contact-mail" href="mailto:beats@prodfish.com">beats@prodfish.com</a>
               </p>
             </article>
 
           </div>
         </div>
 
-        <nav class="panel-dots" aria-label="choose a panel"></nav>
+        <!-- Navigation lives in one cluster under the content. The arrows used
+             to float at top:42% over the panel, which on a phone put them
+             squarely on top of the credit list, covering a word at each edge.
+             Nothing overlaps the content now, and prev / dots / next read as
+             the single control they always were. -->
+        <div class="panel-nav">
+          <button class="panel-arrow panel-prev" type="button" aria-label="previous">&#8249;</button>
+          <nav class="panel-dots" aria-label="choose a panel"></nav>
+          <button class="panel-arrow panel-next" type="button" aria-label="next">&#8250;</button>
+        </div>
       </div>
 
       <footer class="chapel-footer">

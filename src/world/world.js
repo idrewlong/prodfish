@@ -1327,6 +1327,16 @@ function applyWaterMotion(material) {
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `#include <common>
         uniform float uWind;
+        // three declares the attributes it knows about (position, normal, uv,
+        // color) in its own shader prefix and nothing else, so a custom one
+        // has to be declared here. Without it the vertex shader failed to
+        // compile — "'aShore' : undeclared identifier" — which took the whole
+        // water program down and left the pool not drawing at all.
+        // Spelled "attribute" rather than "in" on purpose: three compiles
+        // this as GLSL ES 1.00 and #defines attribute -> in under WebGL2, so
+        // this spelling is the one that works on both.
+        // (No backticks in this comment: it lives inside a template literal.)
+        attribute float aShore;
         // Amplitudes are in METRES. These were 1.6cm, 1.1cm and 0.5cm --
         // physically reasonable for a still pond and completely invisible at
         // the distances involved, which is why the surface still read as

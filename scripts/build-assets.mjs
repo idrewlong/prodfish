@@ -85,6 +85,20 @@ const TEXTURE_SIZE = {
   oak: 2048,
 };
 
+// Models that also get a `<name>-mobile.glb` sibling at half the texture
+// resolution. The church is the only asset large enough to be worth it: of
+// its 4.24MB, 4.06MB is thirteen 2048px maps on a 12k-triangle building that
+// is never seen except at night, through fog, at a distance. Capping those
+// at 1024 costs nothing visible on a phone screen and saves ~2.5MB of the
+// download AND ~170MB of texture memory, which is the figure that actually
+// decides whether a mid-range phone stays at framerate.
+//
+// The variant is derived from the finished `<name>.glb` rather than from the
+// source, so it cannot drift from the desktop model: the same meshes, the
+// same materials, the same node names, only smaller maps. Which one a
+// visitor gets is decided in index.html -- see the preload script there.
+const MOBILE_VARIANTS = new Map([['church', 1024]]);
+
 // Models whose consumers depend on distinct mesh boundaries surviving the
 // build (e.g. one marker placed per credit). `gltf-transform optimize`
 // defaults `--join` to true, which merges compatible meshes/nodes to
@@ -274,6 +288,20 @@ for (const entry of readdirSync(SRC, { withFileTypes: true })) {
     }${PRESERVE_MESHES.has(name) ? ' --join false' : ''}`,
     { stdio: 'inherit' },
   );
+
+  // Geometry is already at its target by this point, so the variant pass is
+  // texture-only: --simplify false and --join false keep the mesh and node
+  // structure byte-for-byte identical to the desktop model, which is what
+  // lets world.js address both by the same node names.
+  const mobileSize = MOBILE_VARIANTS.get(name);
+  if (mobileSize) {
+    const mobileOut = join(OUT, `${name}-mobile.glb`);
+    console.log(`${out} -> ${mobileOut} (textures <=${mobileSize}px)`);
+    execSync(
+      `npx gltf-transform optimize "${out}" "${mobileOut}" --compress draco --texture-compress webp --texture-size ${mobileSize} --simplify false --join false`,
+      { stdio: 'inherit' },
+    );
+  }
 }
 
 rmSync(TMP, { recursive: true, force: true });

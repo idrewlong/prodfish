@@ -128,13 +128,33 @@ export function initScene({
     document.body.classList.add('no-webgl');
     document.body.classList.remove('reduced');
     renderer.dispose();
+    // timer.connect() above registered a visibilitychange listener on the
+    // document; nothing renders after this point, so let it go too.
+    timer.dispose();
   });
 
-  const clock = new THREE.Clock();
+  // THREE.Clock is deprecated as of three 0.185 and warns on construction.
+  // Timer is the replacement, and it is a better fit here than a like-for-like
+  // swap suggests. Clock reported wall-clock time since it started, but
+  // main.js deliberately stops calling render() while the tab is hidden (see
+  // the visibilitychange wiring there) — so a visitor returning after five
+  // minutes away got a scene whose clock had run on without it, and every
+  // wave, sway and firefly jumped five minutes forward in a single frame.
+  //
+  // Timer accumulates deltas instead, and connect(document) makes it zero its
+  // delta while the page is hidden and reset on the way back. The scene now
+  // pauses where it stood and resumes from there, which is what the
+  // battery-saving render skip was always trying to express.
+  const timer = new THREE.Timer();
+  timer.connect(document);
   const look = new THREE.Vector3();
   function render() {
     if (dead) return;
-    const t = clock.getElapsedTime();
+    // Must precede any query against the timer: getElapsed() reports the
+    // state as of the last update(), so reading first would run the whole
+    // scene one frame in arrears.
+    timer.update();
+    const t = timer.getElapsed();
 
     // Camera rides the path; ambient sway layered on top so the scene
     // breathes even when scroll is idle. __DEBUG_CHAPEL__ builds may set

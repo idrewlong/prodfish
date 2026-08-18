@@ -291,6 +291,7 @@ body.failed .load-word { letter-spacing: 0.3em; }
 }
 
 .altar-frame {
+  position: relative;
   width: min(720px, 92vw);
   border: 1px solid rgba(193, 23, 15, 0.45);
   box-shadow:
@@ -306,10 +307,61 @@ body.failed .load-word { letter-spacing: 0.3em; }
 .altar-frame iframe {
   display: block;
   width: 100%;
-  height: min(60vh, 560px);
+  /* Was min(60vh, 560px), which on a 900px-tall window made the beats panel
+     taller than the .panel scroll cap — so "open on beatstars" underneath was
+     sliced in half by the clip edge. Sized against dvh (the live viewport, as
+     everywhere else on this page) and trimmed enough that title + player +
+     link fit the cap at ordinary window heights. */
+  /* Sized to fit the panel's own budget rather than the window's: the panel
+     cap already subtracts the nav and footer, and an iframe that eats all of
+     it pushes "open on beatstars" under the scroll edge — the original bug.
+     Small enough that title + player + link clear the cap on an ordinary
+     laptop; shorter windows scroll, which the fade now advertises. */
+  height: min(48dvh, 460px);
   border: 0;
   background: #0a0302;
+  position: relative;
+  z-index: 1;
+  transition: opacity 0.5s;
 }
+
+/* The player is a third-party embed that can be slow, blocked, or pointed at
+   a store id that does not exist, and in every one of those cases it framed
+   an unexplained black rectangle. The message sits behind the frame and is
+   revealed by .player-pending, which main.js adds on load and removes on the
+   iframe's load event — so it shows while waiting and stays if nothing ever
+   comes. See watchPlayer(). */
+.player-fallback {
+  position: absolute;
+  /* Matches .altar-frame's own padding, so the message occupies exactly the
+     rectangle the player will. */
+  inset: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.7rem;
+  padding: 1.5rem;
+  text-align: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.4s;
+}
+.player-fallback-line {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 1.1rem;
+  color: rgba(216, 211, 200, 0.8);
+}
+.player-fallback-sub {
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: rgba(216, 211, 200, 0.55);
+}
+.player-pending .player-fallback { opacity: 1; }
+.player-pending iframe { opacity: 0; }
 
 .bs-link {
   color: rgba(216, 211, 200, 0.6);
@@ -321,7 +373,7 @@ body.failed .load-word { letter-spacing: 0.3em; }
   padding-bottom: 2px;
   transition: color 0.3s;
 }
-.bs-link:hover { color: var(--bone); }
+.bs-link:hover { color: var(--bone); border-bottom-color: var(--blood); }
 
 
 .contact {
@@ -395,7 +447,85 @@ body.failed .load-word { letter-spacing: 0.3em; }
    whole catalog and bio are in the page for keyboard, screen readers and
    search — no hidden duplicate section needed. */
 .panels { position: relative; width: min(760px, 94vw); }
+
+/* The scrim. The chapel's neon cross sits directly behind this content, and
+   on a phone the credit list landed straight across its arms — "delta psalm"
+   and "kerosene choir" were reading as bone text on saturated red.
+   A card with a border would fix it, but the altar frame's own notes already
+   record why that was rejected once: a hard edge reads as flat UI dropped on
+   the 3D scene. So this is a soft ellipse of night instead, bleeding out well
+   past the text and reaching zero before it meets any edge — the scene still
+   shows through at the margins and there is nothing to see as a box.
+   Deliberately not backdrop-filter: blurring a live 3D canvas every frame is
+   real GPU cost on exactly the phones the low tier exists to protect. */
+.panels::before {
+  content: '';
+  position: absolute;
+  /* Generous, because the falloff has to finish OUTSIDE the text. The list is
+     capped at 34rem inside a 760px panel, so there is room either side for the
+     mask's fade to happen against nothing. See the media query below for
+     phones, where the panel is nearly the full viewport and the fade has to be
+     pushed off-screen entirely. */
+  inset: -16% -22%;
+  /* A soft-edged rectangle, not an ellipse. The first attempt here was a
+     radial gradient, and on a tall phone panel its falloff started so early
+     that the top rows sat outside the dark core entirely — "delta psalm" was
+     still reading on saturated red. This holds near-full opacity across the
+     whole content column instead, and gets its softness from fading out on
+     all four sides: the linear-gradient fades top and bottom, the mask fades
+     left and right. No edge anywhere, and no weak middle. */
+  background: linear-gradient(
+    to bottom,
+    rgba(3, 2, 2, 0) 0%,
+    rgba(3, 2, 2, 0.93) 10%,
+    rgba(3, 2, 2, 0.93) 90%,
+    rgba(3, 2, 2, 0) 100%
+  );
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent 0%, #000 12%, #000 88%, transparent 100%
+  );
+  mask-image: linear-gradient(
+    to right,
+    transparent 0%, #000 12%, #000 88%, transparent 100%
+  );
+  pointer-events: none;
+  z-index: 0;
+}
+/* When a panel is taller than its cap it scrolls, and the row at the boundary
+   was simply sliced — indistinguishable from the end of the list. This fades
+   the last few pixels so a cut row reads as "there is more below" instead. It
+   sits above the strip but takes no pointer events, so it never eats a swipe. */
+.panel-viewport::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2.5rem;
+  background: linear-gradient(to top, rgba(3, 2, 2, 0.92), rgba(3, 2, 2, 0));
+  pointer-events: none;
+  z-index: 2;
+  /* Hidden by default and shown only for a panel that genuinely scrolls (see
+     markOverflow in panels.js). Shown unconditionally it drew a dark band with
+     a visible hard edge across panels that fit perfectly well — the beats and
+     about panels on a desktop window — which looked like a rendering fault
+     rather than an affordance. */
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+.panel-viewport.has-overflow::after { opacity: 1; }
+/* Scrolled to the bottom, the last row IS the last row; fading it there would
+   be claiming there is more when there is not. */
+.panel-viewport.at-scroll-end::after { opacity: 0; }
+
+/* Explicit stacking rather than a negative z-index on the scrim: the pseudo
+   would otherwise paint behind .panels' own box and depend on #chapel's
+   backdrop staying transparent. */
+.panel-viewport, .panel-nav { position: relative; z-index: 1; }
+
 .panel-viewport {
+  position: relative;
   overflow: hidden;
   /* Tells the browser up front that only vertical panning belongs to it.
      Without this, Safari spends the first frames of every horizontal drag
@@ -406,6 +536,9 @@ body.failed .load-word { letter-spacing: 0.3em; }
 .panel-strip {
   display: flex;
   transition: transform 0.55s cubic-bezier(0.22, 0.61, 0.36, 1);
+  /* The strip is as tall as its tallest panel, so every panel shares one
+     height and the nav below it stops moving as you page between them. */
+  align-items: stretch;
 }
 .panel {
   flex: 0 0 100%;
@@ -414,41 +547,72 @@ body.failed .load-word { letter-spacing: 0.3em; }
      anything past this height was previously cut off with no way to scroll
      to it -- which on a short phone screen swallowed the end of the bio.
      The panel itself is now the scroll container. */
-  max-height: 74dvh;
+  /* The cap has to leave room for everything ELSE #chapel stacks below it —
+     the nav cluster, the gap, the attribution footer and the section's own
+     padding — or the whole column overflows the viewport and the top of the
+     panel (its heading) is clipped above the fold with no way to scroll up to
+     it. A flat 78dvh did exactly that on any window shorter than ~800px,
+     including a 1280x720 laptop. The subtraction is the chrome budget; the
+     78dvh ceiling keeps very tall screens from handing the panel the entire
+     window. */
+  max-height: min(78dvh, calc(100dvh - 17rem));
   overflow-y: auto;
   overscroll-behavior: contain;
   min-width: 100%;
   display: flex;
   flex-direction: column;
+  /* Centred so short panels stop hugging the top and leaving a dead gap above
+     the nav. `safe` is the load-bearing word: plain `center` on a flex column
+     that OVERFLOWS its container centres the overflow too, pushing the first
+     rows out past the top edge where no amount of scrolling reaches them —
+     which is exactly what happened to "the work" heading on a phone, where ten
+     credits comfortably exceed the cap. `safe center` falls back to flex-start
+     the moment content would overflow. Declared twice so browsers without the
+     keyword keep the plain centring rather than dropping the property. */
+  justify-content: center;
+  justify-content: safe center;
   align-items: center;
-  gap: 1.4rem;
-  padding: 0 0.5rem;
+  gap: 1.3rem;
+  /* The bottom padding is load-bearing: the last element used to sit flush
+     against the scroll edge and "open on beatstars" was sliced in half by it. */
+  padding: 0.5rem 0.5rem 2rem;
 }
 .panel::-webkit-scrollbar { width: 3px; }
 .panel::-webkit-scrollbar-thumb { background: rgba(193, 23, 15, 0.5); }
 .panel[aria-hidden='true'] { visibility: hidden; }
 
+/* ---------- one navigation cluster, under the content ---------- */
+/* The arrows used to be absolutely positioned at top:42%, floating over the
+   panel. On a phone that put them directly on the credit list, covering a word
+   at each edge on every row they crossed. They are in the flow now, beside the
+   dots they were always a duplicate of. */
+.panel-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  margin-top: 1.5rem;
+}
 .panel-arrow {
-  position: absolute;
-  top: 42%;
-  z-index: 2;
-  background: rgba(8, 7, 6, 0.6);
-  border: 1px solid rgba(193, 23, 15, 0.4);
-  color: var(--bone);
+  background: none;
+  border: 1px solid rgba(193, 23, 15, 0.35);
+  color: rgba(216, 211, 200, 0.75);
   font-family: var(--serif);
-  font-size: 1.6rem;
+  font-size: 1.5rem;
   line-height: 1;
-  width: 2.4rem;
-  height: 2.4rem;
+  /* 44px of touch target; the glyph inside is much smaller than the button. */
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  flex: none;
   cursor: pointer;
   transition: border-color 0.25s, color 0.25s, opacity 0.25s;
 }
 .panel-arrow:hover:not(:disabled) { border-color: var(--blood); color: #fff; }
-.panel-arrow:disabled { opacity: 0.2; cursor: default; }
-.panel-prev { left: -1.2rem; }
-.panel-next { right: -1.2rem; }
+.panel-arrow:disabled { opacity: 0.25; cursor: default; }
 
-.panel-dots { display: flex; gap: 1.6rem; justify-content: center; margin-top: 1.6rem; }
+.panel-dots { display: flex; gap: 1.2rem; justify-content: center; }
 .panel-dot {
   background: none;
   border: 0;
@@ -469,59 +633,167 @@ body.failed .load-word { letter-spacing: 0.3em; }
   border-bottom-color: var(--blood);
 }
 
-/* The catalog is expected to grow well past ten entries. It used to carry
-   its own max-height and scrollbar, which nested a scroller inside the
-   panel's — two scroll areas fighting for the same drag on a touchscreen.
-   The panel above is the single scroll container now; the list just grows. */
+/* ---------- focus ---------- */
+/* Every one of these had a :hover rule and nothing for the keyboard, which on
+   a background this dark meant tabbing through the catalog with no visible
+   indication of where you were. One shared treatment, stated once. */
+.panel-arrow:focus-visible,
+.panel-dot:focus-visible,
+.work-list a:focus-visible,
+.work-socials a:focus-visible,
+.bs-link:focus-visible,
+.contact a:focus-visible,
+.chapel-footer a:focus-visible {
+  outline: 1px solid var(--blood);
+  outline-offset: 3px;
+  color: var(--bone);
+}
+
+/* ---------- the work: a ledger, not a list ---------- */
+/* Artist left, track right, one hairline between — the back of a record
+   sleeve. The catalog is expected to grow well past ten entries, and this
+   stays scannable as it does. The panel above is the single scroll container;
+   the list just grows. */
 .work-list {
   list-style: none;
+  width: 100%;
+  max-width: 34rem;
   display: flex;
   flex-direction: column;
-  gap: 0.9rem;
-  padding-right: 0.5rem;
 }
-.work-list a {
-  color: rgba(216, 211, 200, 0.85);
+.work-row { border-bottom: 1px solid rgba(216, 211, 200, 0.1); }
+.work-row:first-child { border-top: 1px solid rgba(216, 211, 200, 0.1); }
+
+/* Both shapes — linked and inert — lay out identically, so the ledger does
+   not go ragged as real Spotify URLs are filled in one row at a time. */
+.work-row > a,
+.work-row-plain {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: baseline;
+  gap: 1.2rem;
+  padding: 0.8rem 0.3rem;
   text-decoration: none;
-  font-family: var(--serif);
-  font-style: italic;
-  font-size: 1.05rem;
+  transition: background 0.25s;
 }
-.work-list a:hover { color: var(--bone); }
-.work-list .work-artist {
-  display: block;
+.work-row > a { cursor: pointer; }
+
+.work-artist {
   font-family: var(--mono);
   font-style: normal;
   font-size: 0.62rem;
-  letter-spacing: 0.28em;
+  letter-spacing: 0.24em;
   text-transform: uppercase;
   color: rgba(216, 211, 200, 0.6);
 }
-.work-bio {
-  max-width: 34rem;
+.work-track {
   font-family: var(--serif);
-  font-size: 1rem;
-  line-height: 1.7;
-  color: rgba(216, 211, 200, 0.8);
+  font-style: italic;
+  font-size: 1.08rem;
+  color: rgba(216, 211, 200, 0.9);
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.55rem;
+  text-align: right;
+  transition: color 0.25s;
+}
+/* A row with no Spotify URL yet is honestly inert: no pointer, no mark, and
+   dimmer than its linked neighbours so the difference is visible rather than
+   a link that silently does nothing. */
+.work-row-plain .work-track { color: rgba(216, 211, 200, 0.62); }
+
+.work-spotify {
+  width: 0.95em;
+  height: 0.95em;
+  flex: none;
+  opacity: 0.5;
+  transition: opacity 0.25s;
+}
+.work-row > a:hover { background: linear-gradient(90deg, transparent, rgba(193, 23, 15, 0.12), transparent); }
+.work-row > a:hover .work-track { color: #fff; }
+.work-row > a:hover .work-spotify { opacity: 1; }
+
+/* ---------- about ---------- */
+.work-bio {
+  max-width: 32rem;
+  font-family: var(--serif);
+  font-size: 1.02rem;
+  line-height: 1.75;
+  color: rgba(216, 211, 200, 0.78);
   text-align: center;
 }
-.work-socials { display: flex; gap: 2.2rem; flex-wrap: wrap; justify-content: center; }
+/* A lead line, without needing a second element to keep in sync with the bio
+   string in portfolio.js. */
+.work-bio::first-line { color: rgba(216, 211, 200, 0.95); }
+
+.work-socials { display: flex; gap: 2rem; flex-wrap: wrap; justify-content: center; }
 .work-socials a {
   color: rgba(216, 211, 200, 0.6);
   font-family: var(--mono);
-  font-size: 0.72rem;
-  letter-spacing: 0.3em;
+  font-size: 0.68rem;
+  letter-spacing: 0.28em;
   text-transform: uppercase;
   text-decoration: none;
+  border-bottom: 1px solid transparent;
   /* Touch target, not just text. */
-  padding: 0.5rem 0;
+  padding: 0.5rem 0.2rem;
+  transition: color 0.25s, border-color 0.25s;
 }
-.work-socials a:hover { color: var(--bone); }
+.work-socials a:hover { color: var(--bone); border-bottom-color: rgba(193, 23, 15, 0.6); }
+
+/* Custom work is the actual business ask on this page, so the address is a
+   destination rather than a footnote in a sentence. */
+.contact {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.45rem;
+}
+.contact-label {
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  /* Every rgba(bone) alpha on this page was measured against the #050607
+     backdrop: 0.55 is exactly where body text clears WCAG's 4.5:1, and
+     anything at or below 0.5 does not. */
+  color: rgba(216, 211, 200, 0.55);
+}
+.contact-mail {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 1.2rem;
+  color: rgba(216, 211, 200, 0.92);
+  text-decoration: none;
+  border-bottom: 1px solid rgba(193, 23, 15, 0.5);
+  padding-bottom: 3px;
+  transition: color 0.25s, border-color 0.25s;
+}
+.contact-mail:hover { color: #fff; border-bottom-color: var(--blood); }
 
 @media (max-width: 640px) {
-  .panel-prev { left: -0.4rem; }
-  .panel-next { right: -0.4rem; }
-  .panel-dots { gap: 1rem; }
+  /* On a phone the panel is 94vw, so a fade that finishes 12% in from each
+     edge finishes right on top of the credit list — which is exactly where the
+     cross's arms are brightest, and why "nightshade" and "delta psalm" were
+     still sitting on red. Stretching the scrim far past the viewport moves the
+     whole falloff off-screen, leaving the visible width uniformly covered. */
+  .panels::before { inset: -14% -45%; }
+}
+
+@media (max-width: 520px) {
+  /* Two columns need two columns' worth of width. Below this the artist and
+     the track stack, left-aligned, rather than compressing into a pair of
+     wrapped stubs either side of a gap. */
+  .work-row > a,
+  .work-row-plain {
+    grid-template-columns: 1fr;
+    gap: 0.15rem;
+    padding: 0.75rem 0.2rem;
+  }
+  .work-track { justify-content: flex-start; text-align: left; }
+  .panel-dots { gap: 0.7rem; }
+  .panel-dot { letter-spacing: 0.2em; }
 }
 
 /* Ambient sound is off until asked for: browsers refuse to start audio

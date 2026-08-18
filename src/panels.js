@@ -18,6 +18,16 @@ export function panelAfterDrag(current, dragPx, viewportPx, count) {
   return current;
 }
 
+// Whether a panel has content past its scroll cap, and so should show the
+// fade that says "there is more below". The tolerance matters: browsers
+// routinely report a scrollHeight a pixel or two over the client height for
+// content that visually fits, and without it the hint blinks on for panels
+// with nothing to scroll.
+export function overflows(scrollHeight, clientHeight) {
+  if (!clientHeight) return false;
+  return scrollHeight - clientHeight > 2;
+}
+
 export function createPanels(root) {
   const strip = root.querySelector('.panel-strip');
   const viewport = root.querySelector('.panel-viewport');
@@ -52,6 +62,20 @@ export function createPanels(root) {
     dots.forEach((dot, i) => dot.setAttribute('aria-current', i === current ? 'true' : 'false'));
     if (prev) prev.disabled = current === 0;
     if (next) next.disabled = current === panels.length - 1;
+    markOverflow();
+  }
+
+  // The fade lives on the viewport, but whether it is warranted depends on the
+  // panel currently in front of it — the beats panel fits where the ten-row
+  // catalog does not. Re-measured on every change of panel and on resize,
+  // since both change the answer.
+  function markOverflow() {
+    if (!viewport) return;
+    const panel = panels[current];
+    viewport.classList.toggle(
+      'has-overflow',
+      !!panel && overflows(panel.scrollHeight, panel.clientHeight),
+    );
   }
 
   prev?.addEventListener('click', () => go(current - 1));
@@ -103,6 +127,19 @@ export function createPanels(root) {
   // Dragging out of the carousel entirely is an abandoned gesture too.
   viewport?.addEventListener('pointerleave', endGesture);
 
+  // A rotation or a resized window changes which panels overflow. Passive:
+  // this only ever reads layout and toggles a class.
+  window.addEventListener('resize', markOverflow, { passive: true });
+  // The panel is its own scroll container, so scrolling to the bottom should
+  // retire the hint rather than fade a row that is already the last one.
+  for (const panel of panels) {
+    panel.addEventListener('scroll', () => {
+      if (panel !== panels[current]) return;
+      const atEnd = panel.scrollTop + panel.clientHeight >= panel.scrollHeight - 2;
+      viewport?.classList.toggle('at-scroll-end', atEnd);
+    }, { passive: true });
+  }
+
   go(0);
-  return { go };
+  return { go, markOverflow };
 }

@@ -1,0 +1,10 @@
+# prodfish — one page, everything on it.
+User-agent: *
+Allow: /
+
+# The models and the Draco decoder are ~9MB of binary a crawler gains nothing
+# from fetching, and some will happily spend the budget anyway.
+Disallow: /models/
+Disallow: /draco/
+
+Sitemap: https://prodfish.com/sitemap.xml

@@ -5,7 +5,7 @@ import { detectTier } from './device.js';
 import { initScene } from './scenes/sceneManager.js';
 import { createAssetLoader, monotonic } from './world/assets.js';
 import { T_DOOR, T_GATE } from './world/path.js';
-import { CREDITS, BIO, CATALOG_URL, SOCIALS } from './content/portfolio.js';
+import { CREDITS, BIO, CATALOG_URL, SOCIALS, creditLink } from './content/portfolio.js';
 import { initScroll } from './scroll.js';
 import { buildTimeline } from './timeline.js';
 import { createPanels } from './panels.js';
@@ -115,6 +115,34 @@ function warmEmbed() {
   if (frame) frame.loading = 'eager';
 }
 
+// The altar used to frame 560px of flat black for as long as the third-party
+// player took to arrive, which on a slow connection — or behind a blocker, or
+// with a bad store id — is indistinguishable from a site that is simply
+// broken. This says which it is.
+//
+// .player-pending is added from JS rather than sitting in the markup so the
+// no-JS page keeps an ordinary, opaque, working iframe: the class is what
+// makes the frame transparent and shows the message behind it.
+//
+// Only the `load` event clears it. A cross-origin iframe fires that event
+// without telling us anything about what it loaded, which is all that is
+// needed here — something arrived. If nothing ever does, no event fires and
+// the message stays up, which is exactly the desired outcome.
+function watchPlayer() {
+  const frame = document.querySelector('.altar-frame iframe');
+  const shell = frame?.closest('.altar-frame');
+  if (!frame || !shell) return;
+  shell.classList.add('player-pending');
+  // No need to guard against the load having already fired: the frame is
+  // loading="lazy" and stays deferred until warmEmbed() promotes it, which
+  // happens long after this runs.
+  frame.addEventListener(
+    'load',
+    () => shell.classList.remove('player-pending'),
+    { once: true },
+  );
+}
+
 // Full title, then the handoff: the black ground fades off a word that is
 // already exactly where the fill was, because it is the same word.
 function markReady() {
@@ -141,6 +169,15 @@ function markReady() {
   }, wait);
 }
 
+// Read back rather than recomputed: the inline script in index.html already
+// chose between the full chapel and its mobile cut, and issued the preload
+// hint for that exact URL. Deciding again here would risk fetching the file
+// the hint did not warm — a cache miss on the one download the whole loading
+// screen is waiting for. The fallback covers the no-JS-in-head case that
+// cannot actually happen (this file is a module in the same document) and
+// the unit tests, which import main.js without a document.
+const CHURCH_URL = globalThis.__CHURCH__ ?? '/models/church.glb';
+
 async function loadModels() {
   const load = createAssetLoader({ onProgress: showProgress });
   // Not fetched any more, though still present in public/models if wanted
@@ -148,7 +185,7 @@ async function loadModels() {
   // dropped from the scene) — around 990KB of downloads retired.
   const [church, crow, cross, gravestoneA, gravestoneB, stones, oak, watcher, boulder] =
     await Promise.all([
-      load.required('/models/church.glb').catch((e) => {
+      load.required(CHURCH_URL).catch((e) => {
         console.error('chapel failed to load', e);
         return null; // world.js builds a shell; loading screen still clears
       }),
@@ -311,6 +348,69 @@ function bootFailed(err) {
   loading.style.opacity = '1';
 }
 
+// The Spotify mark, inline so it costs no request and inherits currentColor.
+// Drawn in the page's bone rather than Spotify green on purpose: their brand
+// guidelines allow the mark in monochrome black or white, and a green blob is
+// the one thing on this page that would not belong to it. The path is the
+// official mark, unmodified in shape.
+function spotifyMark() {
+  const NS = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(NS, 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('class', 'work-spotify');
+  svg.setAttribute('aria-hidden', 'true');
+  svg.setAttribute('focusable', 'false');
+  const path = document.createElementNS(NS, 'path');
+  path.setAttribute('fill', 'currentColor');
+  path.setAttribute('d', 'M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.52 '
+    + '17.28c-.24.36-.66.48-1.02.24-2.82-1.74-6.36-2.1-10.56-1.14-.42.12-.78-.18-.9-.54-.12-.42.18-.78.54-.9 '
+    + '4.56-1.02 8.52-.6 11.64 1.32.42.18.48.66.3 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.02.6-1.14 '
+    + '4.32-1.32 9.72-.66 13.44 1.62.361.181.54.78.301 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 '
+    + '4.26-1.26 11.28-1.02 15.72 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.299z');
+  svg.append(path);
+  return svg;
+}
+
+// One credit row of the ledger: artist on the left, track on the right.
+//
+// The row is a link ONLY when creditLink() hands back a real Spotify URL.
+// While the catalog is still placeholder that means most rows are inert text,
+// which is the point — a row styled as clickable that goes nowhere is a worse
+// experience than one that plainly is not a link yet. Both shapes render the
+// same two columns, so the ledger does not go ragged as URLs are filled in.
+function creditRow(credit) {
+  const li = document.createElement('li');
+  const href = creditLink(credit);
+
+  const artist = document.createElement('span');
+  artist.className = 'work-artist';
+  artist.textContent = credit.artist;
+
+  const track = document.createElement('span');
+  track.className = 'work-track';
+  track.textContent = credit.track;
+
+  if (!href) {
+    li.className = 'work-row work-row-plain';
+    li.append(artist, track);
+    return li;
+  }
+
+  li.className = 'work-row';
+  const a = document.createElement('a');
+  a.href = href;
+  a.target = '_blank';
+  a.rel = 'noopener';
+  // The visible text is "artist" + "track", which read on their own tell a
+  // screen reader nothing about where the link goes or that it leaves the
+  // page. This says both, once, without adding visible chrome.
+  a.setAttribute('aria-label', `${credit.track} by ${credit.artist} — listen on Spotify (opens in a new tab)`);
+  track.append(spotifyMark());
+  a.append(artist, track);
+  li.append(a);
+  return li;
+}
+
 // Fills the credits and about panels from the content module. The carved
 // song stones along the approach read from the same source, so the two can
 // never drift apart.
@@ -320,19 +420,7 @@ function fillStaticPortfolio() {
   const socialNav = document.querySelector('.work-socials');
   const catalog = document.querySelector('.work-catalog');
   if (!list || !bio || !socialNav || !catalog) return;
-  for (const c of CREDITS) {
-    const li = document.createElement('li');
-    const a = document.createElement('a');
-    a.href = c.url;
-    a.target = '_blank';
-    a.rel = 'noopener';
-    const artist = document.createElement('span');
-    artist.className = 'work-artist';
-    artist.textContent = c.artist;
-    a.append(artist, document.createTextNode(c.track));
-    li.append(a);
-    list.append(li);
-  }
+  for (const c of CREDITS) list.append(creditRow(c));
   bio.textContent = BIO;
   for (const s of SOCIALS) {
     const a = document.createElement('a');
@@ -346,6 +434,7 @@ function fillStaticPortfolio() {
 }
 
 fillStaticPortfolio();
+watchPlayer();
 
 // The panels are the site's only navigation, so they are wired up
 // unconditionally — including on the reduced-motion and no-WebGL paths,
