@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { positionAt, T_DOOR } from './path.js';
+import { TIERS } from '../device.js';
 import { buildMossCurtains, applyBranchSway } from './trees.js';
 import { windUniforms, setWind, WIND_DIR } from './wind.js';
 
@@ -342,6 +343,13 @@ function buildGrass(scene, count, tier = 'high') {
   const pathSamples = [];
   for (let i = 0; i <= 80; i++) pathSamples.push(positionAt(i / 80));
   const graveXZ = PROP_SPOTS.graves.map(([x, z]) => [x, z]);
+  // Field grass does not grow in standing water. This loop predates the
+  // ponds and only ever rejected on distance from the ROAD, so 3.3% of the
+  // tufts were being planted inside them -- standing on the bed 0.73m under
+  // the surface, with the submerged three-quarters of every blade showing
+  // through. Reeds are the plant that belongs in the water, and they are
+  // placed separately (see buildSwamp).
+  const ponds = poolShapes();
 
   const detail = tier === 'low'
     ? { blades: 3, segments: 3 }
@@ -398,6 +406,11 @@ function buildGrass(scene, count, tier = 'high') {
       if (minD < CLEARANCE) break;
     }
     if (minD < CLEARANCE) continue;
+    // Out of the ponds, and off the waterline itself: a tuft standing exactly
+    // at the shore is still half under, which looks no better than one in the
+    // middle. groundHeightAt is the same terrain the tuft would be planted
+    // on, so anything already below the waterline is in the water.
+    if (groundHeightAt(x, z, ponds) < WATER_LEVEL + 0.06) continue;
     // Height varies far more than it used to (0.55x to 1.9x rather than a
     // flat 0.4-0.9m band): unmown grass around graves grows in uneven clumps,
     // and a uniform height was as much of a tell as the flat shading was.
@@ -523,7 +536,13 @@ function buildWindowGlow(scene) {
 // things; these drift slowly across the road and put visible layers between
 // the camera and the treeline, which is the single most low-country thing
 // the scene was missing.
-function buildMist(scene) {
+// Mist banks are big overlapping TRANSPARENT sheets, which is the classic
+// mobile fill-rate killer: every one of them redraws a large slice of the
+// screen, and they stack. Five of them is also simply too much fog on a phone
+// -- on a small screen they overlap far more of the frame than they do on a
+// desktop monitor, which is why the scene came out as soup. The low tier
+// keeps the two furthest-reaching banks at reduced opacity.
+function buildMist(scene, settings = { mist: 5, mistOpacity: 1 }) {
   const tex = makeMistTexture();
   const banks = [];
   const spec = [
@@ -532,8 +551,9 @@ function buildMist(scene) {
     [11, 1.3, 18, 24, 0.22],
     [3, 0.7, 8, 22, 0.20],
     [-6, 1.5, 44, 28, 0.18],
-  ];
-  spec.forEach(([x, y, z, size, opacity], i) => {
+  ].slice(0, settings.mist);
+  spec.forEach(([x, y, z, size, baseOpacity], i) => {
+    const opacity = baseOpacity * settings.mistOpacity;
     const m = new THREE.Mesh(
       new THREE.PlaneGeometry(size, size * 0.42),
       new THREE.MeshBasicMaterial({
@@ -809,7 +829,6 @@ function poolObstacles() {
     ...PROP_SPOTS.graves.map(([x, z]) => [x, z, 1.9]),
     ...PROP_SPOTS.trees.map(([x, z]) => [x, z, 2.6]),
     ...WATCHER_SPOTS.map(([x, z]) => [x, z, 1.6]),
-    [TRUCK_SPOT[0], TRUCK_SPOT[1], 4.4],
   ];
 }
 
@@ -935,20 +954,6 @@ export function swampReedSpots(count) {
   return spots;
 }
 
-// An abandoned 1930s truck left by the trail — a wrecked machine at the
-// roadside is pure southern gothic, and a truck carries more of that than the
-// motorcycle it replaces because it implies people, not a rider.
-//
-// Measured 6.63m clear of the camera corridor, 4.0m from the nearest tree and
-// 3.2m from the nearest gravestone. The clearance is much larger than the
-// bike's 3.11m because the truck is a far bigger object: normalised to 2.2m
-// tall it occupies a 3.3m x 6.2m footprint, so a bike's spot would have put
-// its running board in the road.
-export const TRUCK_SPOT = [7.0, 12.0, -0.55];
-
-// Kept for the tests that still assert the old prop's corridor clearance, and
-// because motorcycle.glb is still in public/models if it is ever wanted back.
-export const BIKE_SPOT = [3.6, 11.0, -0.7];
 
 // Figures standing back among the trees, motionless, never acknowledged.
 //
@@ -1007,9 +1012,13 @@ const WATER_TILE = 3;
 // missing cue is in the TERRAIN -- water in a hollow reads as water because
 // you can see the bank falling away into it.
 export const BASIN_DEPTH = 0.85;
-// The surface sits just below the surrounding field, so the pool fills its
-// hollow to the brim and no basin floor shows through inside the waterline.
-export const WATER_LEVEL = -0.12;
+// The surface sits below the surrounding field by MORE than the waves are
+// tall. At -0.12 with the enlarged waves (+/-0.164m) the crests reached
+// +0.044m -- above the field -- so the pond climbed over its own bank and
+// washed across the grass, while between crests the bed poked back through
+// near the shore. The waterline is wherever the basin crosses this height,
+// which leaves the polygon's own edge buried in the bank and no hard rim.
+export const WATER_LEVEL = -0.28;
 // How far out the bank slopes up to meet the field.
 const BASIN_MARGIN = 2.6;
 
@@ -1156,52 +1165,47 @@ let swampWater = [];
 // Built in the XZ plane directly (not rotated into place like the old
 // CircleGeometry) so the basin carving can be expressed in world coordinates
 // and groundHeightAt() means the same thing here as it does everywhere else.
-function buildGroundGeometry() {
-  const SEGMENTS = 128;
+export function buildGroundGeometry(settings = { groundStep: 0.7 }) {
+  // A NON-UNIFORM XZ GRID, fine across the scene and coarse out to the fog.
+  //
+  // This was a radial grid centred on the world origin, and that is the wrong
+  // shape for the job: angular resolution falls off with distance, so a pond
+  // 40m out got 2.9 x 1.6 vertices across it on the low tier -- no basin was
+  // carved at all, the ground stayed flat at y=0, and the water sitting at
+  // -0.28 was buried underneath it and simply vanished. A grid gives the same
+  // resolution wherever the pond happens to be, which is the property this
+  // actually needs, and it costs fewer vertices because it stops lavishing
+  // detail on the empty middle.
+  const step = settings.groundStep;
   const shapes = poolShapes();
 
-  // Dense where the journey happens, coarse out at the fog line.
-  const radii = [0];
-  for (let r = 0.7; r < 52; r += 0.75) radii.push(r);
-  for (let r = 53; r <= 90; r += 3.5) radii.push(r);
+  // Fine over everything the camera travels through, then a few coarse spans
+  // out to the fog line. One grid, so there is no seam between the two.
+  const axis = (fineFrom, fineTo, coarseLo, coarseHi) => {
+    const out = [...coarseLo];
+    for (let v = fineFrom; v <= fineTo + 1e-6; v += step) out.push(+v.toFixed(3));
+    return out.concat(coarseHi);
+  };
+  const xs = axis(-26, 26, [-90, -60, -42, -32], [32, 42, 60, 90]);
+  const zs = axis(-8, 52, [-46, -26, -15], [60, 72, 90]);
 
   const positions = [];
-  const normals = [];
   const index = [];
-
-  // One definition of ground height, shared with every prop that stands on
-  // it (see groundHeightAt, which owns the road fade too).
-  const carveAt = (x, z) => groundHeightAt(x, z, shapes);
-
-  positions.push(0, carveAt(0, 0), 0);
-  normals.push(0, 1, 0);
-  for (let ri = 1; ri < radii.length; ri++) {
-    for (let s = 0; s < SEGMENTS; s++) {
-      const a = (s / SEGMENTS) * Math.PI * 2;
-      const x = Math.cos(a) * radii[ri];
-      const z = Math.sin(a) * radii[ri];
-      positions.push(x, carveAt(x, z), z);
-      normals.push(0, 1, 0); // replaced by computeVertexNormals below
+  for (let iz = 0; iz < zs.length; iz++) {
+    for (let ix = 0; ix < xs.length; ix++) {
+      positions.push(xs[ix], groundHeightAt(xs[ix], zs[iz], shapes), zs[iz]);
     }
   }
-
-  const ringStart = (ri) => 1 + (ri - 1) * SEGMENTS;
-  for (let s = 0; s < SEGMENTS; s++) {
-    index.push(0, ringStart(1) + s, ringStart(1) + ((s + 1) % SEGMENTS));
-  }
-  for (let ri = 1; ri < radii.length - 1; ri++) {
-    for (let s = 0; s < SEGMENTS; s++) {
-      const a = ringStart(ri) + s;
-      const b = ringStart(ri) + ((s + 1) % SEGMENTS);
-      const c = ringStart(ri + 1) + s;
-      const d = ringStart(ri + 1) + ((s + 1) % SEGMENTS);
-      index.push(a, c, b, b, c, d);
+  const w = xs.length;
+  for (let iz = 0; iz < zs.length - 1; iz++) {
+    for (let ix = 0; ix < w - 1; ix++) {
+      const a = iz * w + ix;
+      index.push(a, a + w, a + 1, a + 1, a + w, a + w + 1);
     }
   }
 
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-  geo.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
   geo.setIndex(index);
   // Real normals, so the bank catches the moon differently from the flat
   // field and the hollow is legible as a shape rather than a colour change.
@@ -1233,8 +1237,10 @@ function buildPool({ centre, outline }) {
   const index = [];
 
   // Ring 0 is the centre point, rings 1..POOL_RINGS march out to the outline.
+  const shores = [];
   positions.push(centre[0], 0, centre[1]);
   colors.push(1, 1, 1);
+  shores.push(1);
   uvs.push(centre[0] / WATER_TILE, centre[1] / WATER_TILE);
 
   for (let r = 1; r <= POOL_RINGS; r++) {
@@ -1242,11 +1248,17 @@ function buildPool({ centre, outline }) {
     // Only the outer quarter shallows out, so the pool reads as deep water
     // with a silty margin rather than as a cone.
     const shade = t < 0.75 ? 1 : 1 - ((t - 0.75) / 0.25) * 0.65;
+    // How freely this vertex may wave: nothing at the rim, full by two
+    // thirds of the way in. Shallow water carries smaller waves than open
+    // water does, and damping them here is also what stops a crest lifting
+    // the edge of the pond up over its bank.
+    const swell = Math.min(Math.max((0.82 - t) / 0.35, 0), 1);
     for (let i = 0; i < n; i++) {
       const x = centre[0] + (outline[i][0] - centre[0]) * t;
       const z = centre[1] + (outline[i][1] - centre[1]) * t;
       positions.push(x, 0, z);
       colors.push(shade, shade, shade);
+      shores.push(swell * swell * (3 - 2 * swell));
       uvs.push(x / WATER_TILE, z / WATER_TILE);
     }
   }
@@ -1271,6 +1283,7 @@ function buildPool({ centre, outline }) {
   geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
   geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
   geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  geo.setAttribute('aShore', new THREE.Float32BufferAttribute(shores, 1));
   geo.setIndex(index);
   geo.computeVertexNormals();
   return geo;
@@ -1283,7 +1296,7 @@ function buildPool({ centre, outline }) {
 // same wave, so the moon's highlights travel across the pool. Highlights that
 // move are what actually make a flat plane read as water.
 function applyWaterMotion(material) {
-  material.customProgramCacheKey = () => 'water:v2';
+  material.customProgramCacheKey = () => 'water:v3';
   material.onBeforeCompile = (shader) => {
     shader.uniforms.uWind = windUniforms.uWind;
     shader.uniforms.uSkyTint = { value: new THREE.Color('#33425e') };
@@ -1337,10 +1350,10 @@ function applyWaterMotion(material) {
           float dz = 0.94 * 0.052 * cos(p.y * 0.94 - t * 0.43)
                    + 1.7 * 0.026 * cos((p.x + p.y) * 1.7 + t * 0.85)
                    - 3.1 * 0.011 * cos((p.x - p.y) * 3.1 - t * 1.25);
-          objectNormal = normalize(vec3(-dx * 3.0, 1.0, -dz * 3.0));
+          objectNormal = normalize(vec3(-dx * 3.0 * aShore, 1.0, -dz * 3.0 * aShore));
         }`)
       .replace('#include <begin_vertex>', `#include <begin_vertex>
-        transformed.y += waveAt(position.xz, uWind);`);
+        transformed.y += waveAt(position.xz, uWind) * aShore;`);
   };
   material.needsUpdate = true;
 }
@@ -1428,21 +1441,6 @@ function buildSwamp(scene, models, tier) {
   mesh.count = spots.length;
   mesh.instanceMatrix.needsUpdate = true;
   scene.add(mesh);
-
-  // The abandoned truck, if it loaded. 2.2m to the cab roof, which is about
-  // right for a 1930s light truck and keeps it readable against the treeline
-  // without looming over the gravestones.
-  if (models.truck) {
-    const [tx, tz, trot] = TRUCK_SPOT;
-    const truck = normalizeProp(models.truck.scene.clone(true), 2.2);
-    truck.position.set(tx, groundHeightAt(tx, tz), tz);
-    truck.rotation.y = trot;
-    // Settled into the ground on decades of flat tyres, nose down.
-    truck.rotation.z = 0.04;
-    truck.rotation.x = -0.03;
-    truck.name = 'truck';
-    scene.add(truck);
-  }
 
   // Dead cypress standing in the marsh. These used to be eight clones of ONE
   // model — the most repetitive set in the scene. Now each is grown
@@ -1560,15 +1558,11 @@ export function boulderSpots(count = 11) {
   const samples = [];
   for (let i = 0; i <= 90; i++) samples.push(positionAt(i / 90));
   // Everything already standing in the field, with the radius each one needs
-  // kept clear. The truck's is much larger than a prop-centre distance would
-  // suggest because it is 6.2m long -- a boulder 1.1m from its origin sits
-  // inside the flatbed, which is exactly where one landed before this list
-  // included it.
+  // kept clear.
   const taken = [
     ...PROP_SPOTS.graves.map(([x, z]) => [x, z, 2.2]),
     ...PROP_SPOTS.trees.map(([x, z]) => [x, z, 2.2]),
     ...WATCHER_SPOTS.map(([x, z]) => [x, z, 1.8]),
-    [TRUCK_SPOT[0], TRUCK_SPOT[1], 4.2],
   ];
   // The pools, computed once rather than per candidate.
   const pools = POOLS.map(poolOutline);
@@ -1864,7 +1858,7 @@ function normalize(gltfScene, targetHeight, centerMatch) {
   return root;
 }
 
-export function buildWorld({ scene, models, grassCount = 0, tier = 'high' }) {
+export function buildWorld({ scene, models, grassCount = 0, tier = 'high', settings = TIERS[tier] }) {
   // Sky dome: un-tonemapped so it stays a legible hazy navy instead of
   // crushing to black (see NIGHT_SKY comment above). Radius sits inside the
   // camera's far plane (130) and fog:false keeps it a flat, un-hazed backdrop
@@ -1885,7 +1879,7 @@ export function buildWorld({ scene, models, grassCount = 0, tier = 'high' }) {
   // which is the cue that was missing. Rings are packed tightly out to ~50m
   // (where everything the camera passes actually is) and coarsely beyond.
   const ground = new THREE.Mesh(
-    buildGroundGeometry(),
+    buildGroundGeometry(settings),
     // ACES Filmic tone mapping crushes low-albedo colors hard toward black
     // (its shadow "toe"), so a ground plane dark enough to look right on
     // paper renders as near-invisible once lit and tone-mapped — bumped
@@ -1906,7 +1900,7 @@ export function buildWorld({ scene, models, grassCount = 0, tier = 'high' }) {
   buildSwamp(scene, models, tier);
   buildBackdrop(scene, tier);
   const rose = buildWindowGlow(scene);
-  const mist = buildMist(scene);
+  const mist = buildMist(scene, settings);
 
   // Moonlight from behind the chapel + a hemisphere fill so silhouettes read
   // in the fog without flattening the southern-gothic near-dark mood.
@@ -2095,8 +2089,13 @@ export function buildWorld({ scene, models, grassCount = 0, tier = 'high' }) {
   // Low tier (likely mobile): thin the heaviest set dressing to ~60% of
   // spots, keeping the ones nearest the path so the visible corridor still
   // reads as dressed. High tier keeps every PROP_SPOTS entry unchanged.
-  const graveSpots = tier === 'low' ? nearestToPath(PROP_SPOTS.graves, 0.6) : PROP_SPOTS.graves;
-  const treeSpots = tier === 'low' ? nearestToPath(PROP_SPOTS.trees, 0.6) : PROP_SPOTS.trees;
+  // Thinned harder than before on low: the oak is 7,112 triangles a copy, so
+  // six of them cost more than the church, the truck and every gravestone put
+  // together. Keeping the ones nearest the path means the corridor the camera
+  // actually travels still reads as fully dressed.
+  const keep = settings.propFraction;
+  const graveSpots = keep < 1 ? nearestToPath(PROP_SPOTS.graves, keep) : PROP_SPOTS.graves;
+  const treeSpots = keep < 1 ? nearestToPath(PROP_SPOTS.trees, keep) : PROP_SPOTS.trees;
   const half = Math.ceil(graveSpots.length / 2);
   // Stones lean, but they do not sway — they are stone.
   place(scene, normalizeProp(grave, 1.1), graveSpots.slice(0, half), { vary: true, seed: 0x51a1 });
@@ -2104,7 +2103,7 @@ export function buildWorld({ scene, models, grassCount = 0, tier = 'high' }) {
   // Mossy boulders through the field, breaking up ground that is otherwise
   // flat between the markers.
   if (models.boulder) {
-    place(scene, normalizeProp(models.boulder.scene, 1.05), boulderSpots(), {
+    place(scene, normalizeProp(models.boulder.scene, 1.05), boulderSpots(settings.boulders), {
       vary: true,
       seed: 0xb01de3,
       // The scan has no underside at all, so a third of it goes under.

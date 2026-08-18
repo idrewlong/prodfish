@@ -44,6 +44,14 @@
   <link rel="preload" href="/models/church.glb" as="fetch" type="model/gltf-binary" crossorigin />
   <link rel="preload" href="/draco/draco_decoder.wasm" as="fetch" type="application/wasm" crossorigin />
 
+  <!-- The player is a third-party origin, so its first byte is behind a DNS
+       lookup, a TCP connect and a TLS handshake — a few hundred ms on mobile
+       before anything is even requested. This pays that down during HTML parse
+       instead of at the moment main.js promotes the frame (see warmEmbed).
+       Only the player origin is listed: preconnecting to hosts the embed may or
+       may not reach for would open sockets that go unused. -->
+  <link rel="preconnect" href="https://player.beatstars.com" crossorigin />
+
   <!-- #loading is only ever cleared by JS adding .ready to <body>, and
        .no-webgl is likewise set from JS. With scripting off neither happens,
        so the page sat on a black screen forever. This lays the document out
@@ -57,6 +65,9 @@
   <noscript>
     <style>
       #loading, #scene, #blackout, #skip, #sound, #volume-row { display: none !important; }
+      /* The title's unlit state and its filling copy belong to the loading
+         sequence, which never runs without JS. Leave the plain title. */
+      .title-fill { display: none; }
       #hero { position: relative; height: 100dvh; }
       #scroll-track { height: auto; }
       #chapel { position: relative; opacity: 1; pointer-events: auto;
@@ -72,9 +83,12 @@
   <canvas id="scene"></canvas>
   <div id="glow" aria-hidden="true"></div>
   <div id="blackout" aria-hidden="true"></div>
+  <!-- Only the black ground and the caption live here. The progress itself is
+       drawn onto the hero title (see #hero below), so the word the visitor
+       watches fill is literally the word that stays on screen afterwards --
+       no second copy to keep aligned with the first. -->
   <div id="loading" aria-hidden="true">
-    <span>entering&hellip;</span>
-    <span class="load-bar"><span class="load-bar-fill"></span></span>
+    <span class="load-word">entering&hellip;</span>
   </div>
   <button id="sound" type="button" aria-pressed="false" aria-label="turn ambient sound on">
     <span class="sound-mark" aria-hidden="true">&#9834;</span><span class="sound-word">sound</span>
@@ -86,8 +100,16 @@
     <span class="vol-end vol-high" aria-hidden="true">&plus;</span>
   </div>
 
+  <!-- While loading, the title sits as barely-there stone and a white copy
+       above it fills from the baseline up as the models arrive. Both are the
+       same glyphs in the same box, so the page fills one word in place rather
+       than swapping between two. The filling copy is aria-hidden so the
+       heading is not announced twice. -->
   <header id="hero">
-    <h1>fish</h1>
+    <h1>
+      <span class="title-word">fish</span>
+      <span class="title-fill" aria-hidden="true">fish</span>
+    </h1>
     <p class="hint">scroll<span class="hint-arrow">▾</span></p>
   </header>
 

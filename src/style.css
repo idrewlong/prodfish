@@ -57,6 +57,26 @@ body {
   opacity: 0.55;
 }
 
+/* Registering --load makes it an animatable number rather than an opaque
+   string, so the mask and glow it drives ease between readings instead of
+   stepping. Browsers without @property still get the loader, just snapping
+   to each reading -- which the loader's own transitions already smooth over. */
+@property --load {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 0;
+}
+
+/* --load is set on <body> rather than on the overlay, because the two things
+   it drives now live in different subtrees: the black ground and its caption
+   here, the ember on the hero title below. */
+/* No transition here: main.js paces --load per frame, and a CSS transition
+   restarting on every one of those writes would lag a second behind the
+   truth. */
+body { --load: 0; }
+/* Only for the final stretch, once the per-frame pacing has stopped. */
+body.settling { transition: --load 0.6s ease-out; }
+
 #loading {
   position: fixed;
   inset: 0;
@@ -65,33 +85,86 @@ body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 1.6rem;
   background: #000;
+  transition: opacity 0.9s ease;
+}
+/* The caption sits where the "scroll" hint will be, so the two trade places
+   rather than one appearing somewhere the other never was. */
+.load-word {
+  position: absolute;
+  top: 50%;
+  margin-top: calc(clamp(4.5rem, 14vw, 11rem) * 0.5 + 2.5rem);
   font-size: 0.7rem;
   letter-spacing: 0.5em;
   text-transform: uppercase;
   color: rgba(216, 211, 200, 0.55);
+}
+/* The loading sequence owns the title while it runs: the word is unlit stone,
+   the hint that will invite scrolling is held back, and the whole hero is
+   lifted above the black ground so it can be seen through it. Everything here
+   is scoped to body.loading, which only a real boot path sets -- so the
+   no-script and no-WebGL pages get an ordinary lit title. */
+body.loading #hero { z-index: 6; }
+body.loading #hero .hint { opacity: 0; }
+body:not(.loading) .title-fill { display: none; }
+
+#hero h1 { position: relative; }
+/* Barely-there stone under the fill. Scoped :not(.ready) so the word returns
+   to full bone in the SAME frame the fill is switched off -- the two are
+   identical glyphs in identical positions, so an instant swap is invisible,
+   whereas crossfading them dips the composite below full opacity in the
+   middle and reads as the title blinking. */
+body.loading:not(.ready) #hero h1 .title-word {
+  color: rgba(216, 211, 200, 0.08);
+  text-shadow: none;
+}
+
+/* The same word in bone, revealed from the baseline up as the bytes arrive.
+   A mask over solid text -- no gradient fill, no bloom -- so what the visitor
+   watches is simply the title arriving. */
+.title-fill {
+  position: absolute;
+  inset: 0;
+  color: var(--bone);
+  /* Both stops scale with --load, so the feathered crest starts closed: at 0
+     they collapse together and nothing shows; by 1 the mask has cleared the
+     cap height entirely. */
+  -webkit-mask-image: linear-gradient(to top,
+    #000 calc(var(--load) * 100%), transparent calc(var(--load) * 114%));
+  mask-image: linear-gradient(to top,
+    #000 calc(var(--load) * 100%), transparent calc(var(--load) * 114%));
+}
+/* The handoff: the filled copy gives the word back to the title underneath,
+   which in the same frame becomes the same bone white. Nothing changes on
+   screen -- which is the point. */
+body.ready .title-fill { opacity: 0; }
+
+/* The face is a webfont. Until it lands, both copies are held back together
+   rather than the fill alone -- gating only the fill meant it appeared at
+   whatever level the download had already reached, popping the word into
+   existence half-full instead of letting it rise from nothing. */
+body.loading #hero h1 { opacity: 0; }
+.fonts-ready body.loading #hero h1 { opacity: 1; transition: opacity 0.4s ease; }
+
+/* The catalog shortcut and the sound controls sit above the overlay (z-index
+   7, long before this) and were showing on top of the loading screen, which
+   offers a way out of a room the visitor has not entered yet. They arrive
+   with the scene instead. */
+body.loading #skip,
+body.loading #sound,
+body.loading #volume-row {
+  opacity: 0;
+  pointer-events: none;
   transition: opacity 0.9s ease;
 }
-/* ~7MB of models is a long wait on a phone, and an unmoving word reads as a
-   hung page rather than a loading one. */
-.load-bar {
-  display: block;
-  width: min(220px, 50vw);
-  height: 1px;
-  background: rgba(216, 211, 200, 0.18);
-  overflow: hidden;
-}
-.load-bar-fill {
-  display: block;
-  width: 100%;
-  height: 100%;
-  background: var(--blood);
-  transform: scaleX(0);
-  transform-origin: left center;
-  transition: transform 0.3s ease-out;
-}
+
 body.ready #loading { opacity: 0; pointer-events: none; }
+
+/* A failed boot drains the word back out and lets the caption underneath
+   carry the message. */
+body.failed .title-fill { opacity: 0; transition: opacity 1.4s ease; }
+body.failed .load-word { letter-spacing: 0.3em; }
+
 .reduced #loading, .no-webgl #loading { display: none; }
 
 #hero {

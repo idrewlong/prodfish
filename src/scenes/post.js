@@ -67,10 +67,22 @@ const FilmShader = {
   `,
 };
 
-export function createPost(renderer, scene, camera) {
+export function createPost(renderer, scene, camera, settings = {}) {
   const composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
   const pass = new ShaderPass(FilmShader);
+
+  // Chromatic aberration samples the red and blue channels at an offset from
+  // green. At a desktop pixel ratio that reads as a filmic hint toward the
+  // frame edges; at the phone's much lower ratio the same offset is a
+  // meaningful fraction of a rendered pixel, so the split becomes literal
+  // red/green/magenta fringing over the fog -- the coloured blotches in the
+  // mobile screenshots. The low tier turns it off outright, and takes the
+  // grain down with it, since per-pixel noise over a buffer that is then
+  // upscaled to the screen reads as colour speckle rather than as film.
+  if (settings.chromatic !== undefined) pass.uniforms.uCA.value = settings.chromatic;
+  if (settings.grain !== undefined) pass.uniforms.uGrain.value = settings.grain;
+
   composer.addPass(pass);
   return {
     composer,

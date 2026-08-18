@@ -29,6 +29,20 @@ export function loadFraction(entries) {
   return (sizedPart * sizedCount + (unsizedDone / unsized) * unsized) / entries.length;
 }
 
+// Wraps a progress callback so the fraction it sees only ever rises. Readings
+// from loadFraction can dip -- an unsized file counted by completion learns its
+// real Content-Length and is re-weighted by bytes -- and light that recedes
+// reads as a fault in a way a hairline sliding back never did.
+export function monotonic(report) {
+  let peak = 0;
+  return (fraction) => {
+    if (Number.isFinite(fraction)) {
+      peak = Math.max(peak, Math.min(1, Math.max(0, fraction)));
+    }
+    report(peak);
+  };
+}
+
 export function createAssetLoader({ onProgress } = {}) {
   const draco = new DRACOLoader();
   draco.setDecoderPath('/draco/');

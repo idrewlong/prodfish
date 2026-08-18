@@ -54,8 +54,14 @@ const PROP_TRIANGLE_BUDGET = {
   // Both are SOLID objects, which is why a budget is safe here at all -- a
   // voxel-grid decimator collapses a truck panel or a rock face without
   // anyone being able to tell, and neither has thin structures to lose.
-  truck: 20000,
-  'mossy-stone': 4000,
+  // A 1930s truck at 9k triangles is indistinguishable from one at 20k at
+  // the distance it stands, and it is a single object the phone pays for in
+  // full whatever the tier.
+  truck: 9000,
+  // Was 4000, which for a BACKGROUND ROCK meant 11 of them cost 41,657
+  // triangles on a phone -- more than the church, the truck and every
+  // gravestone put together. A rock is a lump; it decimates to nothing.
+  'mossy-stone': 900,
 };
 
 // Models that must NEVER be simplified, only texture-compressed.
@@ -86,6 +92,20 @@ const TEXTURE_SIZE = {
 // silently collapses a 10-mesh file down to 1 with no error. Listed models
 // get `--join false` to keep every source mesh intact.
 const PRESERVE_MESHES = new Set(['grave-stones']);
+
+// Sources kept on disk but no longer shipped. The pipeline walks every
+// directory under assets/source, so without this list a build would quietly
+// put these four back into public/models -- and at full size, since removing
+// their budget entries would only mean they came through unsimplified.
+//
+// The raw sources are deliberately NOT deleted: assets/source is gitignored,
+// so unlike the built .glb files (which are tracked and recoverable) these
+// originals exist nowhere else. The truck alone is an 81MB photogrammetry
+// scan. Delete the directory by hand if it is genuinely not wanted.
+//   tree-a, tree-b  -- superseded by oak.glb
+//   motorcycle      -- replaced by the truck, which was then dropped too
+//   truck           -- removed from the scene
+const RETIRED = new Set(['tree-a', 'tree-b', 'motorcycle', 'truck']);
 
 mkdirSync(OUT, { recursive: true });
 
@@ -224,6 +244,10 @@ async function prepare(input, output, budget, name) {
 for (const entry of readdirSync(SRC, { withFileTypes: true })) {
   if (!entry.isDirectory()) continue;
   const name = entry.name;
+  if (RETIRED.has(name)) {
+    console.log(`skip ${name}: retired from the scene (source kept, not shipped)`);
+    continue;
+  }
   const dir = join(SRC, name);
   const input = ['scene.gltf', 'scene.glb', `${name}.glb`, `${name}.gltf`]
     .map((f) => join(dir, f))

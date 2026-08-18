@@ -3,7 +3,7 @@ import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { createState } from './choreography.js';
 import { detectTier } from './device.js';
 import { initScene } from './scenes/sceneManager.js';
-import { createAssetLoader } from './world/assets.js';
+import { createAssetLoader, monotonic } from './world/assets.js';
 import { T_DOOR, T_GATE } from './world/path.js';
 import { CREDITS, BIO, CATALOG_URL, SOCIALS } from './content/portfolio.js';
 import { initScroll } from './scroll.js';
@@ -23,19 +23,130 @@ function webglAvailable() {
 
 const prefersReduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-// Paints the loading screen's progress bar. Kept separate from the loader so
-// the reduced-motion and debug paths get the same feedback for free.
-function showProgress(fraction) {
-  const bar = document.querySelector('#loading .load-bar-fill');
-  if (bar) bar.style.transform = `scaleX(${Math.max(0, Math.min(1, fraction))})`;
+// --load is the one number the reveal reads from: how far the title has filled
+// in, from nothing to the whole word. Kept separate from the loader so the
+// reduced-motion and debug paths get the same feedback for free.
+let bytesFraction = 0;
+const showProgress = monotonic((fraction) => { bytesFraction = fraction; });
+
+function setLoad(value) {
+  document.body.style.setProperty('--load', String(value));
+}
+
+// The fill rises at whichever is slower, the bytes or the clock, and eases
+// toward that target rather than snapping to it. A cached visit is paced by
+// the clock and glides the whole way up; a slow connection is paced by the
+// bytes and stays honest about how much is really here.
+let shown = 0;
+let revealDone = false;
+function paceReveal() {
+  // A frame already queued when the reveal finishes would otherwise land after
+  // the fill is set full and paint the word half-empty, permanently.
+  if (revealDone) return;
+  // Nothing is on screen until the face lands; hold at zero rather than
+  // burning the reveal behind a hidden title.
+  if (!revealStart) return void requestAnimationFrame(paceReveal);
+  const byClock = (performance.now() - revealStart) / REVEAL_FLOOR_MS;
+  shown += (Math.min(bytesFraction, byClock) - shown) * 0.08;
+  setLoad(shown);
+  requestAnimationFrame(paceReveal);
+}
+
+// The blackletter face arrives from Google Fonts, and the title is held hidden
+// until it lands -- otherwise the word paints in fallback serif and jumps a
+// moment later. The cap means a font that never arrives costs a beat, not the
+// whole loading screen.
+//
+// The reveal's clock starts here rather than at first script, so the fill
+// always rises from nothing where it can be seen. Starting it earlier meant
+// the download could finish behind a hidden title, which then appeared
+// most-of-the-way full.
+function awaitTitleFont() {
+  const reveal = () => {
+    if (revealStart) return;
+    revealStart = performance.now();
+    document.documentElement.classList.add('fonts-ready');
+  };
+  if (!document.fonts?.load) return reveal();
+  const cap = setTimeout(reveal, 800);
+  const done = () => { clearTimeout(cap); reveal(); };
+  document.fonts.load('1em UnifrakturMaguntia', 'fish').then(done, done);
+}
+
+// A cached visit finishes the downloads in a few hundred milliseconds, which
+// left the reveal as a flicker nobody could read -- the site appeared to start
+// mid-thought. The fill is given a floor to climb through, measured from the
+// moment the title becomes visible rather than from the last byte, so a slow
+// load never pays it. Slow connections are unaffected: they are already past.
+const REVEAL_FLOOR_MS = 2800;
+// Set when the blackletter face is ready and the reveal becomes watchable.
+let revealStart = 0;
+// How long the fill takes to close the last of its distance once the scene is
+// ready. Scene init blocks the main thread, which freezes the paced fill part
+// way up; animating the remainder means the word always finishes visibly
+// rather than jumping to full.
+const SETTLE_MS = 600;
+
+// The BeatStars player is effectively a second page load -- its own script
+// bundle, fonts and artwork -- and it lives sixteen screens down the journey.
+// Left `loading="lazy"` it did not begin until the visitor was nearly on top of
+// it, so the altar framed an empty box for a beat after the camera settled.
+// Dropping the lazy attribute outright was worse: that download then fought the
+// 4.2MB chapel model for bandwidth during the one stretch that is on the clock.
+//
+// So it is neither. The frame stays lazy through the load and is promoted to
+// eager once the loading screen has finished handing off -- by which point
+// loadModels() has long resolved, so there is no download left to steal from,
+// and the reveal's crossfade is over, so a third-party page laying itself out
+// cannot hitch it. That still leaves the visitor's entire walk up the path for
+// the player to arrive in.
+//
+// Flipping the attribute is the spec'd way to resume a deferred lazy load (the
+// element's lazy load resumption steps run on the change), so a browser that
+// does not honour it simply keeps today's behaviour rather than breaking. The
+// markup keeps its real `src`, so the no-JS page is untouched.
+//
+// Deliberately NOT requestIdleCallback: gsap.ticker renders the scene every
+// frame for as long as the tab is visible, so this page never reports idle
+// time. Measured over CDP, the callback only ever ran via its own timeout --
+// an arbitrary delay wearing the costume of a scheduling decision.
+function warmEmbed() {
+  const frame = document.querySelector('.altar-frame iframe[loading="lazy"]');
+  if (frame) frame.loading = 'eager';
+}
+
+// Full title, then the handoff: the black ground fades off a word that is
+// already exactly where the fill was, because it is the same word.
+function markReady() {
+  showProgress(1);
+  const wait = Math.max(0, REVEAL_FLOOR_MS - (performance.now() - (revealStart || performance.now())));
+  setTimeout(() => {
+    revealDone = true;
+    // Hand the last stretch to CSS: the eased fill is asymptotic, and a stall
+    // during scene init can leave it well short. .settling gives --load a
+    // transition so it closes the gap smoothly however far it has to go.
+    document.body.classList.add('settling');
+    setLoad(1);
+    setTimeout(() => {
+      document.body.classList.add('ready');
+      // The filled copy crossfades into the title over the same 0.9s the
+      // overlay takes to clear; only then does loading let go of the hero --
+      // and only then is it safe to let the third-party player start. Every
+      // scene path (full, reduced, debug) arrives here.
+      setTimeout(() => {
+        document.body.classList.remove('loading', 'settling');
+        warmEmbed();
+      }, 900);
+    }, SETTLE_MS);
+  }, wait);
 }
 
 async function loadModels() {
   const load = createAssetLoader({ onProgress: showProgress });
   // Not fetched any more, though still present in public/models if wanted
-  // back: tree-a/tree-b (replaced by oak.glb) and motorcycle (replaced by
-  // truck.glb) — 834KB of downloads retired.
-  const [church, crow, cross, gravestoneA, gravestoneB, stones, oak, truck, watcher, boulder] =
+  // back: tree-a/tree-b (replaced by oak.glb), motorcycle, and truck (both
+  // dropped from the scene) — around 990KB of downloads retired.
+  const [church, crow, cross, gravestoneA, gravestoneB, stones, oak, watcher, boulder] =
     await Promise.all([
       load.required('/models/church.glb').catch((e) => {
         console.error('chapel failed to load', e);
@@ -47,11 +158,10 @@ async function loadModels() {
       load.optional('/models/gravestone-b.glb'),
       load.optional('/models/grave-stones.glb'),
       load.optional('/models/oak.glb'),
-      load.optional('/models/truck.glb'),
       load.optional('/models/zombie.glb'),
       load.optional('/models/mossy-stone.glb'),
     ]);
-  return { church, crow, cross, gravestoneA, gravestoneB, stones, oak, truck, watcher, boulder };
+  return { church, crow, cross, gravestoneA, gravestoneB, stones, oak, watcher, boulder };
 }
 
 
@@ -64,7 +174,7 @@ async function boot() {
     state, tier, models,
     onThunder: () => ambience.thunder(),
   });
-  document.body.classList.add('ready');
+  markReady();
   // Freeze the journey's basis before anything measures against it, so the
   // track height, the master timeline and the audio duck all span the same
   // number of pixels.
@@ -147,7 +257,7 @@ async function bootStatic() {
   state.fireflies = 0.6;
   const models = await loadModels();
   const app = initScene({ canvas: document.getElementById('scene'), state, tier: 'low', models });
-  document.body.classList.add('ready');
+  markReady();
   let frames = 0;
   const tick = () => {
     app.render();
@@ -161,7 +271,7 @@ async function bootDebug() {
   const state = createState();
   const models = await loadModels();
   const app = initScene({ canvas: document.getElementById('scene'), state, tier: 'high', models });
-  document.body.classList.add('ready');
+  markReady();
   document.getElementById('blackout').style.opacity = '0';
   document.getElementById('hero').style.display = 'none';
 
@@ -188,7 +298,12 @@ function bootFailed(err) {
   console.error('boot failed', err);
   const loading = document.getElementById('loading');
   if (!loading) return;
-  loading.textContent = 'something went wrong — refresh to retry';
+  // Written into the caption rather than over the whole overlay: textContent
+  // on #loading would delete the mark the message is meant to sit under.
+  // .failed drains the light out of it instead — a dead candle.
+  document.body.classList.add('failed');
+  const word = loading.querySelector('.load-word') ?? loading;
+  word.textContent = 'something went wrong — refresh to retry';
   // Inline styles win over the .reduced/.no-webgl CSS rules that otherwise
   // hide #loading in those modes, so the message is visible regardless of
   // which boot path failed.
@@ -318,8 +433,23 @@ soundBtn?.addEventListener('click', async (e) => {
 
 if (prefersReduced) document.body.classList.add('reduced');
 
+awaitTitleFont();
+
+// body.loading is what hands the hero title over to the loading sequence, so
+// it is set only on the paths that actually boot a scene. The no-WebGL page
+// never does, and gets an ordinary lit title with no ember over it.
+if (webglAvailable()) {
+  document.body.classList.add('loading');
+  paceReveal();
+}
+
 if (!webglAvailable()) {
   document.body.classList.add('no-webgl');
+  // This path never boots a scene, so it never reaches markReady(). #chapel is
+  // laid out visibly here (see .no-webgl #chapel), which usually means the lazy
+  // frame loads on its own -- but that depends on where the section lands, and
+  // there is no model download left to protect either way.
+  warmEmbed();
 } else if (new URLSearchParams(location.search).has('debug')) {
   bootDebug().catch(bootFailed);
 } else if (prefersReduced) {

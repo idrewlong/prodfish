@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { loadFraction } from '../src/world/assets.js';
+import { loadFraction, monotonic } from '../src/world/assets.js';
 import { isTouchTablet } from '../src/device.js';
 import {
   JOURNEY_VH, journeyDistancePx, journeyTrackPx, viewportBasis, resetViewportBasis,
@@ -43,6 +43,42 @@ describe('loadFraction', () => {
       { loaded: 100, total: 100, done: true },
       { loaded: 0, total: 0, done: true },
     ])).toBe(1);
+  });
+});
+
+describe('monotonic', () => {
+  it('passes a rising reading straight through', () => {
+    const seen = [];
+    const report = monotonic((f) => seen.push(f));
+    report(0.2);
+    report(0.6);
+    expect(seen).toEqual([0.2, 0.6]);
+  });
+
+  it('holds its peak when a reading drops', () => {
+    // loadFraction dips when an unsized file learns its real total. A hairline
+    // nudging backwards was invisible; candlelight receding is not.
+    const seen = [];
+    const report = monotonic((f) => seen.push(f));
+    report(0.6);
+    report(0.4);
+    expect(seen).toEqual([0.6, 0.6]);
+  });
+
+  it('clamps readings outside 0..1', () => {
+    const seen = [];
+    const report = monotonic((f) => seen.push(f));
+    report(-0.5);
+    report(1.5);
+    expect(seen).toEqual([0, 1]);
+  });
+
+  it('ignores a reading that is not a number', () => {
+    const seen = [];
+    const report = monotonic((f) => seen.push(f));
+    report(0.3);
+    report(NaN);
+    expect(seen).toEqual([0.3, 0.3]);
   });
 });
 

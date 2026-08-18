@@ -38,7 +38,7 @@ export function initScene({
 
   const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 130);
 
-  const world = buildWorld({ scene, models, grassCount: settings.grass, tier });
+  const world = buildWorld({ scene, models, grassCount: settings.grass, tier, settings });
   // Grave markers flanking the approach. Ten of them: they used to carry one
   // carved song title each, and the count is kept because it reads as an
   // avenue rather than because it maps to anything now.
@@ -58,7 +58,7 @@ export function initScene({
 
   const weather = createWeather(scene, { onThunder: () => onThunder?.() });
 
-  const post = createPost(renderer, scene, camera);
+  const post = createPost(renderer, scene, camera, settings);
 
   if (window.__DEBUG_CHAPEL__) {
     window.__scene = scene;

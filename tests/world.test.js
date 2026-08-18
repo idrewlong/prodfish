@@ -2,8 +2,8 @@ import { describe, it, expect } from 'vitest';
 import {
   PROP_SPOTS, minPathClearance, roadEndT, roadSampleCount,
   SWAMP_CENTRE, SWAMP_RADIUS, swampReedSpots, swampTreeSpots,
-  TRUCK_SPOT, WATCHER_SPOTS, boulderSpots, POOLS, poolOutline,
-  poolShapes, groundHeightAt, BASIN_DEPTH, WATER_LEVEL,
+  WATCHER_SPOTS, boulderSpots, POOLS, poolOutline,
+  poolShapes, groundHeightAt, BASIN_DEPTH, WATER_LEVEL, buildGroundGeometry,
   PINE_INNER, PINE_OUTER, HILL_RADIUS, pineSpots,
 } from '../src/world/world.js';
 import { positionAt } from '../src/world/path.js';
@@ -72,23 +72,6 @@ function corridorClearance(x, z) {
   }
   return min;
 }
-
-describe('the abandoned truck', () => {
-  it('sits well clear of the camera corridor', () => {
-    // Normalised to 2.2m tall the truck occupies a 3.3m x 6.2m footprint, so
-    // it needs far more room than the motorcycle it replaced (which sat at
-    // 3.11m). At the bike's old spot its running board would be in the road.
-    const [x, z] = TRUCK_SPOT;
-    expect(corridorClearance(x, z)).toBeGreaterThan(5.5);
-  });
-
-  it('does not stand inside a gravestone or a tree', () => {
-    const [x, z] = TRUCK_SPOT;
-    const props = [...PROP_SPOTS.graves, ...PROP_SPOTS.trees];
-    const nearest = Math.min(...props.map(([px, pz]) => Math.hypot(px - x, pz - z)));
-    expect(nearest).toBeGreaterThan(2.8);
-  });
-});
 
 describe('the watchers', () => {
   it('stand back among the trees, not on the road', () => {
@@ -169,15 +152,6 @@ describe('mossy boulders', () => {
         ...polys.flatMap((poly) => poly.map(([ex, ez]) => Math.hypot(ex - x, ez - z))),
       );
       expect(toEdge).toBeGreaterThan(1.5);
-    }
-  });
-
-  it('never stands one inside the truck', () => {
-    // The truck is 6.2m long, so centre-to-centre distance has to allow for
-    // far more than a gravestone's footprint. One landed 1.07m away -- inside
-    // the flatbed -- when this exclusion was missing.
-    for (const [x, z] of boulderSpots()) {
-      expect(Math.hypot(x - TRUCK_SPOT[0], z - TRUCK_SPOT[1])).toBeGreaterThan(4);
     }
   });
 
@@ -299,8 +273,7 @@ describe('the pond basins', () => {
     // markers standing in open water, trees growing out of a pond. The
     // outline now clamps against the props as well as the path.
     const props = [
-      ...PROP_SPOTS.graves, ...PROP_SPOTS.trees,
-      ...WATCHER_SPOTS, [TRUCK_SPOT[0], TRUCK_SPOT[1]], ...boulderSpots(),
+      ...PROP_SPOTS.graves, ...PROP_SPOTS.trees, ...WATCHER_SPOTS, ...boulderSpots(),
     ];
     for (const [x, z] of props) expect(inPond(x, z)).toBe(false);
   });
@@ -345,6 +318,50 @@ describe('the pond basins', () => {
     for (const { centre, outline } of shapes) {
       const radii = outline.map(([x, z]) => Math.hypot(x - centre[0], z - centre[1]));
       expect(Math.max(...radii)).toBeLessThan(9);
+    }
+  });
+});
+
+describe('the ground mesh actually carries the basins', () => {
+  // groundHeightAt describing a basin is not the same as the MESH having the
+  // resolution to express one. The ground was previously a radial grid centred
+  // on the world origin, whose angular spacing grows with distance: a pond 40m
+  // out got 2.9 x 1.6 vertices across it, no basin was carved, the ground
+  // stayed flat at y=0 and the water sitting below it disappeared entirely.
+  // These run against the real geometry, at both tiers' settings.
+  for (const [tier, groundStep] of [['high', 0.7], ['low', 1.2]]) {
+    it(`digs a real hollow at ${tier} tier`, () => {
+      const geo = buildGroundGeometry({ groundStep });
+      const pos = geo.getAttribute('position');
+
+      for (const { centre, outline } of poolShapes()) {
+        const reach = Math.max(...outline.map(([x, z]) => Math.hypot(x - centre[0], z - centre[1])));
+        let deepest = 0;
+        let belowWaterline = 0;
+        for (let i = 0; i < pos.count; i++) {
+          const dx = pos.getX(i) - centre[0];
+          const dz = pos.getZ(i) - centre[1];
+          if (Math.hypot(dx, dz) > reach) continue;
+          deepest = Math.min(deepest, pos.getY(i));
+          if (pos.getY(i) < WATER_LEVEL) belowWaterline += 1;
+        }
+        // The bed has to reach most of the way down...
+        expect(deepest).toBeLessThan(-BASIN_DEPTH * 0.8);
+        // ...over enough vertices that there is a surface to see water on.
+        expect(belowWaterline).toBeGreaterThan(8);
+      }
+    });
+  }
+
+  it('leaves the field beyond the ponds flat', () => {
+    const pos = buildGroundGeometry({ groundStep: 0.7 }).getAttribute('position');
+    const shapes = poolShapes();
+    for (let i = 0; i < pos.count; i++) {
+      const far = shapes.every(({ centre, outline }) => {
+        const reach = Math.max(...outline.map(([x, z]) => Math.hypot(x - centre[0], z - centre[1])));
+        return Math.hypot(pos.getX(i) - centre[0], pos.getZ(i) - centre[1]) > reach + 4;
+      });
+      if (far) expect(pos.getY(i)).toBeCloseTo(0, 5);
     }
   });
 });
