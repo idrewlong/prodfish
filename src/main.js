@@ -425,9 +425,10 @@ function creditRow(credit) {
   return li;
 }
 
-// Fills the credits and about panels from the content module. The carved
-// song stones along the approach read from the same source, so the two can
-// never drift apart.
+// Fills the credits and about panels from the content module. This is the
+// only place a credit's text is ever rendered — the carved stones along the
+// approach are untitled geometry and read nothing from CREDITS, so editing a
+// track or artist here touches the DOM and nothing else.
 function fillStaticPortfolio() {
   const list = document.querySelector('.work-list');
   const bio = document.querySelector('.work-bio');
