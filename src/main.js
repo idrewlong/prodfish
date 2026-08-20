@@ -113,6 +113,9 @@ const SETTLE_MS = 600;
 function warmEmbed() {
   const frame = document.querySelector('.altar-frame iframe[loading="lazy"]');
   if (frame) frame.loading = 'eager';
+  // Promoting the frame is the moment the player actually starts loading, so
+  // it is also the moment the stall clock may start. See watchPlayer.
+  startPlayerStallClock();
 }
 
 // The altar used to frame 560px of flat black for as long as the third-party
@@ -140,19 +143,35 @@ function warmEmbed() {
 // STALL_MS escalates the wording for an embed that never arrives at all. A
 // blocked embed that still fires `load` will fall through to BeatStars' own
 // blank frame, which is the one case nothing here can improve on.
+//
+// The clock is started by warmEmbed(), NOT here. watchPlayer runs at parse,
+// but the frame is loading="lazy" and does not fetch anything until warmEmbed
+// promotes it at markReady() — so a timer started here would be measuring
+// scene load and the walk down the road, not the player. It ran out before
+// the altar was ever on screen, and "taking its time" was the only wording
+// anyone saw. Covered by tests/e2e/smoke.spec.js.
 const PLAYER_STALL_MS = 8000;
+
+let startPlayerStallClock = () => {};
 
 function watchPlayer() {
   const frame = document.querySelector('.altar-frame iframe');
   const shell = frame?.closest('.altar-frame');
   if (!frame || !shell) return;
   shell.classList.add('player-pending');
-  const stalled = setTimeout(() => shell.classList.add('player-stalled'), PLAYER_STALL_MS);
+  let stalled = 0;
+  startPlayerStallClock = () => {
+    // warmEmbed is reachable from more than one boot path; only the first
+    // call is the moment the fetch began.
+    if (stalled) return;
+    stalled = setTimeout(() => shell.classList.add('player-stalled'), PLAYER_STALL_MS);
+  };
   // No need to guard against the load having already fired: the frame is
   // loading="lazy" and stays deferred until warmEmbed() promotes it, which
   // happens long after this runs.
   frame.addEventListener('load', () => {
     clearTimeout(stalled);
+    startPlayerStallClock = () => {};
     shell.classList.remove('player-pending', 'player-stalled');
   }, { once: true });
 }
