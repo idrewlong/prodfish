@@ -20,6 +20,11 @@ body {
   background: var(--night);
   color: var(--bone);
   font-family: var(--mono);
+  /* Does not, on its own, stop the page scrolling sideways: an overflow set
+     on <body> while <html> is `visible` is propagated to the viewport, which
+     leaves nothing actually clipping here. Kept because it costs nothing and
+     is what most browsers' quirk paths still read; the rule that does the
+     work is on #chapel. Measured — see tests/e2e/smoke.spec.js. */
   overflow-x: hidden;
   /* iOS shows a grey flash on every tap target otherwise, which reads as a
      rendering fault against a scene this dark. */
@@ -292,7 +297,13 @@ body.failed .load-word { letter-spacing: 0.3em; }
 
 .altar-frame {
   position: relative;
+  /* 92vw is measured against the window, but this sits inside a panel that
+     is narrower than the window — on a 375px phone that resolved to 345px in
+     a 337px content box and the beats panel could be dragged 4px sideways.
+     The cap stays viewport-relative for the breathing room it buys on wide
+     screens; max-width keeps it honest about the box it is actually in. */
   width: min(720px, 92vw);
+  max-width: 100%;
   border: 1px solid rgba(193, 23, 15, 0.45);
   box-shadow:
     0 0 60px rgba(193, 23, 15, 0.22),
@@ -530,6 +541,14 @@ body.failed .load-word { letter-spacing: 0.3em; }
 /* Explicit stacking rather than a negative z-index on the scrim: the pseudo
    would otherwise paint behind .panels' own box and depend on #chapel's
    backdrop staying transparent. */
+/* The panel strip lays all three panels out in a row and slides between
+   them, so two of them always sit off to the right. `.panel-viewport` clips
+   them from view, but they still lengthened the document's scroll area —
+   375px-wide phones could drag the whole page 147px sideways onto blank
+   ground. `clip` rather than `hidden` because hidden would force overflow-y
+   to `auto` and make #chapel a scroll container of its own. */
+#chapel { overflow-x: clip; }
+
 .panel-viewport, .panel-nav { position: relative; z-index: 1; }
 
 .panel-viewport {
