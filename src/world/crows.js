@@ -5,11 +5,19 @@ import { crowPhase } from './events.js';
 // Crows perch on the roofline and scatter along per-crow escape curves as
 // crowT sweeps 0->1. All motion derives from crowT, so scrubbing back
 // re-perches them.
-export function createCrows({ scene, gltf, roofline, count }) {
+// `stonePerch` is the real top surface of the monument the lone crow stands
+// on, handed in by sceneManager from buildMonuments(). Optional: without it
+// the bird falls back to its old fixed spot rather than disappearing. NOT
+// named `perch` — the roofline loop below has its own local `perch`, and two
+// different perches under one name is how the bird got lost the first time.
+export function createCrows({ scene, gltf, roofline, count, stonePerch = null }) {
   // One bird does not scatter. It sits on a stone by the road and turns its
   // head to follow the camera, which is far more unsettling than the whole
   // flock leaving -- and it is still there on the way back.
   let watcher = null;
+  // Resting height, kept so the idle bob below is a wobble around the perch
+  // rather than a jump back to a hardcoded number.
+  let watcherBaseY = 1.35;
   // ...and one crosses the moon, far off, on its own slow loop. Both are
   // deliberately outside the scatter set below.
   let distant = null;
@@ -26,11 +34,18 @@ export function createCrows({ scene, gltf, roofline, count }) {
   // clone of the same source, so measure once and reuse.
   let crowScale = 1;
   let footOffset = 0;
+  // Kept out of the block below because the lone crow needs them too: it is
+  // scaled differently (0.9 vs 1.6) and so has a different foot offset, and
+  // deriving its own from the same probe is what keeps the two in step.
+  let probeMinY = 0;
+  let probeMax = 1;
   if (gltf) {
     const probeBox = new THREE.Box3().setFromObject(gltf.scene);
     const probeSize = probeBox.getSize(new THREE.Vector3());
-    crowScale = 1.6 / Math.max(probeSize.x, probeSize.y, probeSize.z);
-    footOffset = -probeBox.min.y * crowScale;
+    probeMax = Math.max(probeSize.x, probeSize.y, probeSize.z);
+    probeMinY = probeBox.min.y;
+    crowScale = 1.6 / probeMax;
+    footOffset = -probeMinY * crowScale;
   }
   for (let i = 0; i < count; i++) {
     const side = i % 2 === 0 ? 1 : -1;
@@ -111,14 +126,34 @@ export function createCrows({ scene, gltf, roofline, count }) {
 
   if (gltf) {
     watcher = skeletonClone(gltf.scene);
-    const wb = new THREE.Box3().setFromObject(watcher);
-    const wsize = wb.getSize(new THREE.Vector3());
-    watcher.scale.setScalar(0.9 / Math.max(wsize.x, wsize.y, wsize.z));
-    watcher.position.set(3.1, 1.35, 18.4);
+    const watcherScale = 0.9 / probeMax;
+    watcher.scale.setScalar(watcherScale);
+
+    // It used to sit at a hardcoded (3.1, 1.35, 18.4). The 1.35 was not
+    // arbitrary — it is exactly STONE_HEIGHT in monuments.js, so this was
+    // written to stand on a monument. But the x/z was never lined up with
+    // one: the nearest stone is at (3.81, 17.82), 0.92m away, so the bird
+    // hovered at perching height over open ground with nothing under it.
+    //
+    // Now it takes the real top surface of the real stone, and adds its own
+    // foot offset — the source GLB's origin is NOT at the bird's feet (see
+    // the probe above), so without this it would sit buried to the ankles or
+    // hovering again. Exactly what the roofline perches already do; this one
+    // was simply never given the same treatment.
+    const watcherFoot = -probeMinY * watcherScale;
+    watcherBaseY = (stonePerch ? stonePerch.y : 1.35) + watcherFoot;
+    watcher.position.set(
+      stonePerch ? stonePerch.x : 3.1,
+      watcherBaseY,
+      stonePerch ? stonePerch.z : 18.4,
+    );
+    // Named so the __raycastForward/__raycastNDC debug helpers in
+    // sceneManager report it by name instead of as an anonymous 'Group'.
+    watcher.name = 'crow-watcher';
     scene.add(watcher);
 
     distant = skeletonClone(gltf.scene);
-    distant.scale.setScalar(0.9 / Math.max(wsize.x, wsize.y, wsize.z));
+    distant.scale.setScalar(watcherScale);
     scene.add(distant);
   }
 
@@ -131,7 +166,7 @@ export function createCrows({ scene, gltf, roofline, count }) {
         // reads as a broken puppet.
         headLook.set(cameraPos.x, watcher.position.y, cameraPos.z);
         watcher.lookAt(headLook);
-        watcher.position.y = 1.35 + Math.sin(elapsed * 1.6) * 0.02;
+        watcher.position.y = watcherBaseY + Math.sin(elapsed * 1.6) * 0.02;
       }
       if (distant) {
         // A long, slow pass across the sky near the moon.

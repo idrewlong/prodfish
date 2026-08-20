@@ -91,6 +91,14 @@ function standUpright(obj, height) {
   return wrapper;
 }
 
+// Which stone the lone crow sits on (see createCrows). Index into
+// MONUMENT_SPOTS, not a coordinate, so the bird cannot drift away from the
+// stone the way it used to: it was parked at a hardcoded (3.1, 1.35, 18.4),
+// which is 0.92m to the side of this stone over open ground, at exactly
+// STONE_HEIGHT — perching height, no perch. Reordering MONUMENT_SPOTS moves
+// the bird with the stone; tests/monuments.test.js pins the choice.
+export const CROW_PERCH_STONE = 8;
+
 export function buildMonuments({ scene, stonesGltf, creditCount }) {
 
   // The supplied GLB holds one mesh per marker, so each credit gets a
@@ -101,7 +109,12 @@ export function buildMonuments({ scene, stonesGltf, creditCount }) {
     stonesGltf.scene.traverse((o) => { if (o.isMesh) sources.push(o); });
   }
 
-  const credits = [];
+  // The exact top surface of each stone. standUpright() puts the feet on
+  // y = 0, so the top is simply its height. Returned rather than discarded
+  // (it used to be built and thrown away with the rest of the return value)
+  // because something standing ON a stone needs the real surface, not a
+  // number typed next to it.
+  const stoneTops = [];
   const count = Math.min(creditCount, MONUMENT_SPOTS.length);
   for (let i = 0; i < count; i++) {
     const [x, z, rotY, s] = MONUMENT_SPOTS[i];
@@ -110,9 +123,16 @@ export function buildMonuments({ scene, stonesGltf, creditCount }) {
     stone.position.set(x, 0, z);
     stone.rotation.y = rotY;
     scene.add(stone);
-    credits.push(new THREE.Vector3(x, STONE_HEIGHT * s + 0.45, z));
+    stoneTops.push(new THREE.Vector3(x, STONE_HEIGHT * s, z));
 
   }
 
-  return {};
+  // Clamped rather than indexed blind: creditCount can be smaller than
+  // CROW_PERCH_STONE, and a bird handed `undefined` would silently fall back
+  // to floating in mid-air — the exact bug this return value exists to fix.
+  const crowPerch = stoneTops.length
+    ? stoneTops[Math.min(CROW_PERCH_STONE, stoneTops.length - 1)]
+    : null;
+
+  return { stoneTops, crowPerch };
 }

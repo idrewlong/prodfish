@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  MONUMENT_SPOTS, minWorkPathClearance, sideOfRoute,
+  MONUMENT_SPOTS, minWorkPathClearance, sideOfRoute, CROW_PERCH_STONE,
 } from '../src/world/monuments.js';
 import { CREDITS } from '../src/content/portfolio.js';
 
@@ -28,3 +28,23 @@ describe('MONUMENT_SPOTS', () => {
 });
 
 
+
+describe('the stone the lone crow perches on', () => {
+  it('is a real stone, not an index past the end of the row', () => {
+    expect(Number.isInteger(CROW_PERCH_STONE)).toBe(true);
+    expect(CROW_PERCH_STONE).toBeGreaterThanOrEqual(0);
+    expect(CROW_PERCH_STONE).toBeLessThan(MONUMENT_SPOTS.length);
+  });
+
+  it('is still the one beside the road, if this array is ever reordered', () => {
+    // The bird spent a long time hovering at perching height over open
+    // ground, 0.92m from the nearest stone, because its position was typed
+    // in rather than derived. It is derived now — but only from the INDEX,
+    // so a reshuffle of MONUMENT_SPOTS would move the bird somewhere else
+    // entirely without anything else noticing. This is that alarm.
+    const [x, z] = MONUMENT_SPOTS[CROW_PERCH_STONE];
+    expect(x).toBeGreaterThan(0);          // right-hand side of the road
+    expect(z).toBeGreaterThan(15);
+    expect(z).toBeLessThan(21);
+  });
+});

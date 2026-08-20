@@ -42,9 +42,12 @@ export function initScene({
   // Grave markers flanking the approach. Ten of them: they used to carry one
   // carved song title each, and the count is kept because it reads as an
   // avenue rather than because it maps to anything now.
-  buildMonuments({ scene, stonesGltf: models.stones, creditCount: 10 });
+  const monuments = buildMonuments({ scene, stonesGltf: models.stones, creditCount: 10 });
   const crows = createCrows({
     scene, gltf: models.crow, roofline: world.roofline, count: settings.crows,
+    // The lone crow stands on a real stone rather than a typed-in height —
+    // built before it, so the surface exists by the time the bird needs it.
+    stonePerch: monuments.crowPerch,
   });
   const candles = createCandles({
     scene,
