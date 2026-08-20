@@ -46,6 +46,13 @@ function dropBundledDraco() {
 
 export default defineConfig({
   plugins: [dropBundledDraco()],
+  // vitest globs `tests/` and would otherwise try to collect the Playwright
+  // specs, which import a runner it knows nothing about. The two suites are
+  // split by extension rather than by directory so a stray file cannot end
+  // up in the wrong runner: `*.test.js` is vitest, `*.spec.js` is Playwright.
+  test: {
+    include: ['tests/**/*.test.js'],
+  },
   build: {
     // three is ~600KB of the bundle and changes only when the dependency is
     // upgraded; the site's own code changes constantly. Splitting them means

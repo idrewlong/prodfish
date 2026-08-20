@@ -11,3 +11,8 @@ skills-lock.json
 
 # asset pipeline scratch output (scripts/build-assets.mjs)
 assets/.tmp-simplified/
+
+# Playwright run output (tests/e2e is the source; these are artifacts)
+test-results/
+playwright-report/
+blob-report/
