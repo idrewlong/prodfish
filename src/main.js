@@ -124,23 +124,37 @@ function warmEmbed() {
 // no-JS page keeps an ordinary, opaque, working iframe: the class is what
 // makes the frame transparent and shows the message behind it.
 //
-// Only the `load` event clears it. A cross-origin iframe fires that event
-// without telling us anything about what it loaded, which is all that is
-// needed here — something arrived. If nothing ever does, no event fires and
-// the message stays up, which is exactly the desired outcome.
+// What is and is not detectable here, since it constrains the design:
+// a cross-origin iframe exposes nothing about what it loaded. contentDocument
+// is null and contentWindow.location throws whether the embed rendered
+// perfectly or failed outright, and `load` fires for a browser error page
+// just as it does for a real one. Measured both ways — the two are
+// indistinguishable from script.
+//
+// So this does NOT try to tell success from failure. It covers the case that
+// is both detectable and by far the most common: the player is simply slow,
+// and the altar framed an unexplained black rectangle for the whole wait.
+// While no load has fired the frame says so; once one does, it hands over and
+// whatever BeatStars renders — player or its own empty state — is theirs.
+//
+// STALL_MS escalates the wording for an embed that never arrives at all. A
+// blocked embed that still fires `load` will fall through to BeatStars' own
+// blank frame, which is the one case nothing here can improve on.
+const PLAYER_STALL_MS = 8000;
+
 function watchPlayer() {
   const frame = document.querySelector('.altar-frame iframe');
   const shell = frame?.closest('.altar-frame');
   if (!frame || !shell) return;
   shell.classList.add('player-pending');
+  const stalled = setTimeout(() => shell.classList.add('player-stalled'), PLAYER_STALL_MS);
   // No need to guard against the load having already fired: the frame is
   // loading="lazy" and stays deferred until warmEmbed() promotes it, which
   // happens long after this runs.
-  frame.addEventListener(
-    'load',
-    () => shell.classList.remove('player-pending'),
-    { once: true },
-  );
+  frame.addEventListener('load', () => {
+    clearTimeout(stalled);
+    shell.classList.remove('player-pending', 'player-stalled');
+  }, { once: true });
 }
 
 // Full title, then the handoff: the black ground fades off a word that is

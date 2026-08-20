@@ -363,6 +363,14 @@ body.failed .load-word { letter-spacing: 0.3em; }
 .player-pending .player-fallback { opacity: 1; }
 .player-pending iframe { opacity: 0; }
 
+/* Two wordings, one element. "On its way" is true for the first few seconds
+   and reassuring; left up for half a minute it starts to read as a lie, so
+   after PLAYER_STALL_MS (see watchPlayer) it becomes the second line and the
+   pointer to the link below carries the weight instead. */
+.player-late { display: none; }
+.player-stalled .player-waiting { display: none; }
+.player-stalled .player-late { display: block; }
+
 .bs-link {
   color: rgba(216, 211, 200, 0.6);
   font-size: 0.72rem;
