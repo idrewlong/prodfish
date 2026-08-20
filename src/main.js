@@ -539,6 +539,17 @@ async function startAmbience() {
 
 listenForUnlock(true);
 
+// The same guard the volume row needs, and for a sharper reason. The unlock
+// listeners below sit on `window` and fire on pointerdown; a click on this
+// button is a pointerdown too, so the ambience would start on the way down
+// and the click handler — arriving a millisecond later to a context that is
+// now running — would read it as "already on" and immediately stop it again.
+// Net effect: the first press appeared to do nothing at all, the volume row
+// never came up (it hangs off body.sound-on), and only a second press
+// worked. Stopping the pointerdown here leaves the click handler as the one
+// authority on what this button means. Covered by tests/e2e/smoke.spec.js.
+soundBtn?.addEventListener('pointerdown', (e) => e.stopPropagation());
+
 soundBtn?.addEventListener('click', async (e) => {
   e.stopPropagation();
   if (ambience.running) {
