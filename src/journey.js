@@ -44,3 +44,23 @@ export function viewportBasis(innerHeight) {
 export function resetViewportBasis() {
   frozen = null;
 }
+
+// The chapel is `position: absolute; bottom: 0` inside the track, so it always
+// occupies the track's LAST pixels and grows upward. At one viewport tall its
+// top edge lands at 15V -- exactly where the master timeline ends. Left alone,
+// a three-station chapel would put that edge at 13V and start framing itself
+// while the camera was still walking, which is the "position shifts" jump the
+// ACT 5 opacity ramp exists to prevent (see style.css on #chapel).
+//
+// So the track absorbs the overflow. The chapel occupies the bottom V + E of a
+// 16V + E track, which puts its top edge back at 15V, unmoved. The timeline
+// still spans journeyDistancePx(V) and still ends where it did; the extra E is
+// pure post-journey scroll that reveals the second and third stations.
+//
+// Safe to measure: #chapel is absolutely positioned and full-width, so its
+// height follows from its content and the viewport width, never from the track
+// height this returns. No circularity.
+export function trackPxWithChapel(viewportPx, chapelPx) {
+  const overflow = Number.isFinite(chapelPx) ? Math.max(0, chapelPx - viewportPx) : 0;
+  return journeyTrackPx(viewportPx) + overflow;
+}

@@ -10,7 +10,7 @@ import { initScroll } from './scroll.js';
 import { buildTimeline } from './timeline.js';
 import { createPanels } from './panels.js';
 import { createAmbience, duckLevel } from './audio.js';
-import { journeyDistancePx, journeyTrackPx, viewportBasis, resetViewportBasis } from './journey.js';
+import { journeyDistancePx, trackPxWithChapel, viewportBasis, resetViewportBasis } from './journey.js';
 
 function webglAvailable() {
   try {
@@ -255,9 +255,15 @@ async function boot() {
   // frozen pixel basis (see journey.js) rather than one being `vh` and the
   // other `innerHeight` -- units that are equal on desktop and differ by the
   // toolbar's height on iOS Safari.
+  // The chapel is pinned to the bottom of the track and grows upward, so a
+  // chapel taller than one viewport would start framing itself mid-journey.
+  // Measuring it here and handing it to trackPxWithChapel keeps its top edge
+  // where the timeline ends, however many stations it holds.
   const track = document.getElementById('scroll-track');
+  const chapel = document.getElementById('chapel');
   const sizeTrack = () => {
-    track.style.height = `${journeyTrackPx(viewportBasis(window.innerHeight))}px`;
+    const basis = viewportBasis(window.innerHeight);
+    track.style.height = `${trackPxWithChapel(basis, chapel?.offsetHeight ?? 0)}px`;
   };
   sizeTrack();
 
