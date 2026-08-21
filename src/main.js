@@ -258,7 +258,7 @@ async function boot() {
   // The chapel is pinned to the bottom of the track and grows upward, so a
   // chapel taller than one viewport would start framing itself mid-journey.
   // Measuring it here and handing it to trackPxWithChapel keeps its top edge
-  // where the timeline ends, however many stations it holds.
+  // where the timeline ends, whatever the chapel comes to hold.
   const track = document.getElementById('scroll-track');
   const chapel = document.getElementById('chapel');
   const sizeTrack = () => {
