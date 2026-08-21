@@ -549,7 +549,7 @@ body.failed .load-word { letter-spacing: 0.3em; }
    to `auto` and make #chapel a scroll container of its own. */
 #chapel { overflow-x: clip; }
 
-.panel-viewport, .panel-nav { position: relative; z-index: 1; }
+.panel-viewport, .altar-lintel { position: relative; z-index: 1; }
 
 .panel-viewport {
   position: relative;
@@ -608,64 +608,104 @@ body.failed .load-word { letter-spacing: 0.3em; }
 .panel::-webkit-scrollbar-thumb { background: rgba(193, 23, 15, 0.5); }
 .panel[aria-hidden='true'] { visibility: hidden; }
 
-/* ---------- one navigation cluster, under the content ---------- */
-/* The arrows used to be absolutely positioned at top:42%, floating over the
-   panel. On a phone that put them directly on the credit list, covering a word
-   at each edge on every row they crossed. They are in the flow now, beside the
-   dots they were always a duplicate of. */
-.panel-nav {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.4rem;
-  margin-top: 1.5rem;
-}
-.panel-arrow {
-  background: none;
-  border: 1px solid rgba(193, 23, 15, 0.35);
-  color: rgba(216, 211, 200, 0.75);
-  font-family: var(--serif);
-  font-size: 1.5rem;
-  line-height: 1;
-  /* 44px of touch target; the glyph inside is much smaller than the button. */
-  width: 44px;
-  height: 44px;
-  display: grid;
-  place-items: center;
-  flex: none;
-  cursor: pointer;
-  transition: border-color 0.25s, color 0.25s, opacity 0.25s;
-}
-.panel-arrow:hover:not(:disabled) { border-color: var(--blood); color: #fff; }
-.panel-arrow:disabled { opacity: 0.25; cursor: default; }
+/* ---------- the altar lintel ---------- */
+/* This was a row of dots between two chevrons. It was competent UI and it was
+   the one element that made sixteen screens of graveyard resolve into "a
+   website": a control cluster, centred, sitting on top of a 3D scene and
+   belonging to neither it nor the page.
 
-.panel-dots { display: flex; gap: 1.2rem; justify-content: center; }
-.panel-dot {
+   It is three words cut into the altar face now. Two things do the work, and
+   neither is a border: the stone is a soft band that fades out on all four
+   sides (no rectangle, nothing to read as a box -- the same reasoning as the
+   panel scrim above), and the letters are engraved rather than drawn, with a
+   hard black edge above each glyph and a faint bone edge below. That pairing
+   is what the eye reads as cut IN rather than printed ON.
+
+   The current word is lit in candlelight, not in blood red, because the vigil
+   candle directly above it is the same state in the 3D scene. Kept deliberately
+   dim: a glow with any real radius here reads as a button. */
+.altar-lintel {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: clamp(0.9rem, 4vw, 2.6rem);
+  margin-top: 1.8rem;
+  padding: 0.9rem 1.5rem 1rem;
+}
+
+/* The stone. Warm grey, brightest just under the candles and falling into
+   shadow at the base, faded to nothing at both ends so it never draws an edge
+   against the scene. */
+.altar-lintel::before {
+  content: '';
+  position: absolute;
+  inset: 0 -14%;
+  background: linear-gradient(
+    to bottom,
+    rgba(122, 112, 99, 0) 0%,
+    rgba(122, 112, 99, 0.1) 24%,
+    rgba(98, 89, 78, 0.14) 58%,
+    rgba(18, 15, 13, 0.32) 93%,
+    rgba(0, 0, 0, 0) 100%
+  );
+  -webkit-mask-image: linear-gradient(to right, transparent 0%, #000 18%, #000 82%, transparent 100%);
+  mask-image: linear-gradient(to right, transparent 0%, #000 18%, #000 82%, transparent 100%);
+  pointer-events: none;
+  z-index: -1;
+}
+
+/* The chisel line the words stand on. */
+.altar-lintel::after {
+  content: '';
+  position: absolute;
+  left: 12%;
+  right: 12%;
+  bottom: 0.5rem;
+  height: 1px;
+  background: linear-gradient(to right, transparent, rgba(216, 211, 200, 0.16), transparent);
+  pointer-events: none;
+}
+
+.altar-mark {
+  position: relative;
   background: none;
   border: 0;
-  border-bottom: 1px solid transparent;
-  color: rgba(216, 211, 200, 0.55);
   font-family: var(--mono);
   font-size: 0.62rem;
-  letter-spacing: 0.28em;
+  letter-spacing: 0.3em;
   text-transform: uppercase;
-  /* 44px of touch target regardless of how small the label renders. */
-  padding: 0.6rem 0.35rem;
+  /* 0.55 is the measured floor for 4.5:1 against this backdrop; see the notes
+     on .contact. Everything unlit sits exactly there rather than below it. */
+  color: rgba(216, 211, 200, 0.55);
+  /* Engraved: black above the glyph, a bone highlight below it. */
+  text-shadow:
+    0 -1px 0 rgba(0, 0, 0, 0.9),
+    0 1px 0 rgba(216, 211, 200, 0.09);
+  /* 44px of touch target regardless of how small the word renders. */
   min-height: 44px;
+  padding: 0.6rem 0.4rem 0.7rem;
   cursor: pointer;
-  transition: color 0.25s, border-color 0.25s;
+  transition: color 0.35s, text-shadow 0.35s;
 }
-.panel-dot[aria-current='true'] {
-  color: var(--bone);
-  border-bottom-color: var(--blood);
+.altar-mark:hover { color: rgba(216, 211, 200, 0.85); }
+
+/* Lit. The colour is the flame's own (#ffd696 at the core of the candle
+   sprite, see makeGlowTexture in world/candles.js), so the word and the wick
+   above it are plainly the same light. */
+.altar-mark[aria-current='true'] {
+  color: rgba(255, 214, 150, 0.92);
+  text-shadow:
+    0 -1px 0 rgba(0, 0, 0, 0.9),
+    0 0 12px rgba(255, 170, 60, 0.3);
 }
 
 /* ---------- focus ---------- */
 /* Every one of these had a :hover rule and nothing for the keyboard, which on
    a background this dark meant tabbing through the catalog with no visible
    indication of where you were. One shared treatment, stated once. */
-.panel-arrow:focus-visible,
-.panel-dot:focus-visible,
+.altar-mark:focus-visible,
 .work-list a:focus-visible,
 .work-socials a:focus-visible,
 .bs-link:focus-visible,
@@ -819,8 +859,11 @@ body.failed .load-word { letter-spacing: 0.3em; }
     padding: 0.75rem 0.2rem;
   }
   .work-track { justify-content: flex-start; text-align: left; }
-  .panel-dots { gap: 0.7rem; }
-  .panel-dot { letter-spacing: 0.2em; }
+  /* Three words at 0.3em tracking do not fit 375px in one line. Tighter
+     tracking keeps them on one row, which the lintel needs -- a wrapped
+     lintel is a list, not a carving. */
+  .altar-lintel { gap: 0.5rem; padding-left: 0.4rem; padding-right: 0.4rem; }
+  .altar-mark { letter-spacing: 0.16em; font-size: 0.58rem; }
 }
 
 /* Ambient sound is off until asked for: browsers refuse to start audio

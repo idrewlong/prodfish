@@ -28,25 +28,25 @@ export function overflows(scrollHeight, clientHeight) {
   return scrollHeight - clientHeight > 2;
 }
 
-export function createPanels(root) {
+export function createPanels(root, { onChange } = {}) {
   const strip = root.querySelector('.panel-strip');
   const viewport = root.querySelector('.panel-viewport');
   const panels = [...root.querySelectorAll('.panel')];
-  const dotsNav = root.querySelector('.panel-dots');
-  const prev = root.querySelector('.panel-prev');
-  const next = root.querySelector('.panel-next');
+  const lintel = root.querySelector('.altar-lintel');
   if (!strip || !panels.length) return { go: () => {} };
 
   let current = 0;
 
-  const dots = panels.map((panel, i) => {
-    const dot = document.createElement('button');
-    dot.type = 'button';
-    dot.className = 'panel-dot';
-    dot.textContent = panel.getAttribute('aria-label') ?? `panel ${i + 1}`;
-    dot.addEventListener('click', () => go(i));
-    dotsNav?.append(dot);
-    return dot;
+  // One word per panel, cut into the altar face. Built from the panels' own
+  // aria-labels so the lintel cannot drift out of step with what it steers.
+  const marks = panels.map((panel, i) => {
+    const mark = document.createElement('button');
+    mark.type = 'button';
+    mark.className = 'altar-mark';
+    mark.textContent = panel.getAttribute('aria-label') ?? `panel ${i + 1}`;
+    mark.addEventListener('click', () => go(i));
+    lintel?.append(mark);
+    return mark;
   });
 
   function go(requested) {
@@ -59,9 +59,11 @@ export function createPanels(root) {
       panel.toggleAttribute('inert', !active);
       panel.setAttribute('aria-hidden', active ? 'false' : 'true');
     });
-    dots.forEach((dot, i) => dot.setAttribute('aria-current', i === current ? 'true' : 'false'));
-    if (prev) prev.disabled = current === 0;
-    if (next) next.disabled = current === panels.length - 1;
+    marks.forEach((mark, i) => mark.setAttribute('aria-current', i === current ? 'true' : 'false'));
+    // The vigil candles are the same state in the 3D scene: whichever word is
+    // current, that candle is the lit one. Optional so the no-WebGL and
+    // reduced-motion paths, which never build a scene, still page normally.
+    onChange?.(current);
     markOverflow();
   }
 
@@ -77,9 +79,6 @@ export function createPanels(root) {
       !!panel && overflows(panel.scrollHeight, panel.clientHeight),
     );
   }
-
-  prev?.addEventListener('click', () => go(current - 1));
-  next?.addEventListener('click', () => go(current + 1));
 
   root.addEventListener('keydown', (e) => {
     if (e.key === 'ArrowLeft') go(current - 1);

@@ -139,9 +139,10 @@
                 background: radial-gradient(ellipse at 50% 30%, #2b0402, #0d0100 75%); }
       .panel { max-height: none; overflow: visible; }
       .panel-strip { display: block; }
-      /* The whole nav cluster goes: with no JS the strip is laid out as
-         stacked blocks, so there is nothing left to page between. */
-      .panel-nav { display: none; }
+      /* The lintel goes: its buttons are built by createPanels(), so with no
+         JS it is an empty <nav>, and the strip below lays out as stacked
+         blocks with nothing left to page between. */
+      .altar-lintel { display: none; }
       /* The fallback is only ever revealed by .player-pending, which JS adds.
          Without JS the iframe is opaque and on top, so this would be dead
          weight sitting behind it — but hide it outright rather than trusting
@@ -250,16 +251,22 @@
           </div>
         </div>
 
-        <!-- Navigation lives in one cluster under the content. The arrows used
-             to float at top:42% over the panel, which on a phone put them
-             squarely on top of the credit list, covering a word at each edge.
-             Nothing overlaps the content now, and prev / dots / next read as
-             the single control they always were. -->
-        <div class="panel-nav">
-          <button class="panel-arrow panel-prev" type="button" aria-label="previous">&#8249;</button>
-          <nav class="panel-dots" aria-label="choose a panel"></nav>
-          <button class="panel-arrow panel-next" type="button" aria-label="next">&#8250;</button>
-        </div>
+        <!-- The altar lintel. This was a row of dots between two chevrons,
+             which is the single element that made the destination read as a
+             website dropped on a 3D scene rather than as the chapel itself.
+             It is now three words cut into the stone of the altar face, with
+             the vigil candles above them (see createNavCandles in
+             world/candles.js) showing which one is lit.
+
+             The arrows are gone rather than restyled: with only three
+             sections, every one of them is one word away, and prev/next was
+             always a second way to say what the words already said. Arrow
+             KEYS still work -- see the keydown handler in panels.js.
+
+             The buttons are built by createPanels() from each panel's
+             aria-label, so the lintel cannot fall out of step with the panels
+             it steers. -->
+        <nav class="altar-lintel" aria-label="choose a panel"></nav>
       </div>
 
       <footer class="chapel-footer">
