@@ -765,7 +765,11 @@ Expected: PASS. `tests/panels.test.js` is gone; `tests/stations.test.js` and `te
 Run: `npm run test:e2e`
 Expected: PASS, all suites.
 
-If the layout suite fails on horizontal drag, the cause is almost certainly `.stations::before` at `inset: ... -22%` — it is `pointer-events: none` but still a painted box. Confirm `#chapel` no longer needs `overflow-x: clip` before adding it back; the scrim was never the thing that widened the document, the off-screen panels were.
+**This failed on first run, and the reasoning above was wrong.** Four layout viewports could drag sideways. `#chapel { overflow-x: clip }` was never only about the parked panels — it was also clipping `.panels::before`, whose overhang (`-22%`, and `-45%` on phones) is deliberately wider than the column so its falloff finishes off-screen. Removing the rule exposed that overhang as real document width.
+
+Restore `#chapel { overflow-x: clip; }` in the stations block. `clip`, not `hidden`: hidden forces `overflow-y: auto`, which would make `#chapel` a scroll container and silently break the sticky nav — the page still looks correct until you scroll. That interaction is now guarded by the "nav stays pinned" e2e test.
+
+Also note: `npx playwright test 2>&1 | tail -N` reports **tail's** exit code, not Playwright's. The first run of this task exited 0 with four failures. Read the summary line, never the exit code.
 
 - [ ] **Step 12: Commit**
 
