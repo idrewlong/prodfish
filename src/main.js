@@ -295,6 +295,33 @@ async function boot() {
     }, 250);
   });
 
+  // A WIDTH change is the other real layout change, and it was going
+  // unnoticed. The chapel is `position: absolute; bottom: 0` and its height
+  // follows from its content reflowing at the new width -- a narrower window
+  // wraps the bio and the credit rows onto more lines and makes it taller.
+  // The track absorbs that overflow (see trackPxWithChapel), so if the track
+  // is not re-sized the chapel's top edge no longer lands where the timeline
+  // ends and it starts framing itself mid-walk.
+  //
+  // Width ONLY, and deliberately: iOS Safari fires `resize` on every toolbar
+  // collapse, which changes the height and nothing else. Re-measuring on that
+  // is the lurch that the frozen viewport basis (see journey.js) exists to
+  // prevent, so the basis is never reset here -- the journey keeps spanning
+  // exactly the pixels it started with, and only the chapel's overflow is
+  // recomputed. Debounced because a resize drag fires continuously and both
+  // sizeTrack() and refresh() read layout.
+  let lastWidth = window.innerWidth;
+  let resizeTimer = 0;
+  window.addEventListener('resize', () => {
+    if (window.innerWidth === lastWidth) return;
+    lastWidth = window.innerWidth;
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => {
+      sizeTrack();
+      ScrollTrigger.refresh();
+    }, 150);
+  }, { passive: true });
+
   // Duck the swamp once the beats arrive, so the track is not competing with
   // crickets. Spanning the same fixed journey distance as the master
   // timeline, so `progress` here means the same thing it does there.
