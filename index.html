@@ -34,9 +34,9 @@
        out statically rather than injected by main.js because crawlers treat
        markup in the served HTML as far more reliable than markup a script
        adds afterwards.
-       Still missing, and only because the data is still PLACEHOLDER: the
-       catalog as `track`/`byArtist` entries generated from CREDITS, the way
-       the about panel already is. -->
+       Still missing: the catalog as `track`/`byArtist` entries generated from
+       CREDITS, the way the about panel already is. CREDITS holds real records
+       now, so the data is no longer the thing blocking it. -->
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
@@ -47,7 +47,7 @@
     "description": "beats from the dark south. Production credits, catalog and custom work.",
     "genre": "Hip Hop",
     "image": "https://prodfish.com/og.png",
-    "email": "beats@prodfish.com",
+    "email": "work4fish1@gmail.com",
     "sameAs": [
       "https://www.instagram.com/prodfish/",
       "https://x.com/prodfish"
@@ -233,9 +233,15 @@
               <h2 class="chapel-title">the work</h2>
               <!-- A ledger, not a list: artist left, track right, one rule
                    between. Rows are links only where a real Spotify URL
-                   exists — see creditRow() in main.js. -->
+                   exists — see creditRow() in main.js.
+
+                   The link below used to read "the full catalog" and point at
+                   a BeatStars store URL that was never filled in, so it
+                   shipped as .../PLACEHOLDER. Genius is the real index of the
+                   production catalog, so it points there now — one link that
+                   works rather than two where one was dead. -->
               <ul class="work-list"></ul>
-              <a class="bs-link work-catalog" target="_blank" rel="noopener">the full catalog &#8599;</a>
+              <a class="bs-link work-catalog" target="_blank" rel="noopener">every credit on genius &#8599;</a>
             </article>
 
             <article class="panel" id="panel-about" aria-label="about">
@@ -244,7 +250,7 @@
               <nav class="work-socials" aria-label="social links"></nav>
               <p class="contact">
                 <span class="contact-label">custom work</span>
-                <a class="contact-mail" href="mailto:beats@prodfish.com">beats@prodfish.com</a>
+                <a class="contact-mail" href="mailto:work4fish1@gmail.com">work4fish1@gmail.com</a>
               </p>
             </article>
 

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { CREDITS, BIO, CATALOG_URL, SOCIALS, creditLink } from '../src/content/portfolio.js';
+import { CREDITS, BIO, GENIUS_URL, SOCIALS, creditLink } from '../src/content/portfolio.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const html = readFileSync(join(here, '..', 'index.html'), 'utf8');
@@ -36,8 +36,20 @@ describe('portfolio content', () => {
   it('bio is a few sentences, not a stub', () => {
     expect(BIO.length).toBeGreaterThan(80);
   });
-  it('exposes a catalog url', () => {
-    expect(CATALOG_URL).toMatch(/^https?:\/\//);
+  // The panel's one outbound link. It shipped for months as a BeatStars URL
+  // still reading PLACEHOLDER, which is the failure this asserts against:
+  // a link that looks filled in and goes nowhere.
+  it('points the catalog link at a real genius artist page', () => {
+    expect(GENIUS_URL).toMatch(/^https:\/\/genius\.com\/artists\/.+/);
+    expect(GENIUS_URL).not.toMatch(/PLACEHOLDER/i);
+  });
+
+  // The ledger is real credits now, not the ten stand-ins it shipped with.
+  it('carries no leftover placeholder credits', () => {
+    for (const c of CREDITS) {
+      expect(c.artist).not.toMatch(/placeholder/i);
+      expect(c.track).not.toMatch(/placeholder/i);
+    }
   });
 });
 

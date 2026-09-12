@@ -5,7 +5,7 @@ import { detectTier } from './device.js';
 import { initScene } from './scenes/sceneManager.js';
 import { createAssetLoader, monotonic } from './world/assets.js';
 import { T_DOOR, T_GATE } from './world/path.js';
-import { CREDITS, BIO, CATALOG_URL, SOCIALS, creditLink } from './content/portfolio.js';
+import { CREDITS, BIO, GENIUS_URL, SOCIALS, creditLink } from './content/portfolio.js';
 import { initScroll } from './scroll.js';
 import { buildTimeline } from './timeline.js';
 import { createPanels } from './panels.js';
@@ -519,7 +519,7 @@ function fillStaticPortfolio() {
     a.textContent = s.label;
     socialNav.append(a);
   }
-  catalog.href = CATALOG_URL;
+  catalog.href = GENIUS_URL;
 }
 
 fillStaticPortfolio();
