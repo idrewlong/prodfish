@@ -395,16 +395,6 @@ body.failed .load-word { letter-spacing: 0.3em; }
 .bs-link:hover { color: var(--bone); border-bottom-color: var(--blood); }
 
 
-.contact {
-  font-size: 0.78rem;
-  letter-spacing: 0.12em;
-  /* Every rgba(bone) alpha on this page was measured against the #050607
-     backdrop: 0.55 is exactly where body text clears WCAG's 4.5:1, and
-     anything at or below 0.5 (this was 0.5) does not. */
-  color: rgba(216, 211, 200, 0.55);
-}
-.contact a { color: rgba(216, 211, 200, 0.8); }
-
 .chapel-footer {
   margin-top: 3rem;
   font-size: 0.65rem;

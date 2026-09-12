@@ -176,13 +176,13 @@ export function initScene({
       post.composer.render();
       return;
     }
-    const pos = positionAt(state.pathT, state.route);
+    const pos = positionAt(state.pathT);
     camera.position.set(
       pos.x + Math.sin(t * 0.28) * 0.14 * state.swayAmp,
       pos.y + Math.sin(t * 0.19) * 0.08 * state.swayAmp,
       pos.z,
     );
-    look.copy(targetAt(state.pathT, state.route));
+    look.copy(targetAt(state.pathT));
     camera.lookAt(look);
 
     world.door.rotation.y = doorAngle(state.doorT);
