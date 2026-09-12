@@ -254,9 +254,15 @@
         <!-- The altar lintel. This was a row of dots between two chevrons,
              which is the single element that made the destination read as a
              website dropped on a 3D scene rather than as the chapel itself.
-             It is now three words cut into the stone of the altar face, with
-             the vigil candles above them (see createNavCandles in
-             world/candles.js) showing which one is lit.
+             It is now three words cut into the stone of the altar face,
+             marked with aria-current so the lit one is obvious to a screen
+             reader as well as to the eye.
+
+             (The Vigil design called for the 3D candles above the lintel to
+             light in step with the current word. That is NOT built: nothing
+             creates per-panel nav candles, and createPanels' onChange hook --
+             which exists for exactly this -- is passed nothing. See
+             docs/superpowers/specs/2026-08-20-the-vigil-design.md.)
 
              The arrows are gone rather than restyled: with only three
              sections, every one of them is one word away, and prev/next was
