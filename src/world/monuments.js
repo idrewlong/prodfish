@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { positionAt } from './path.js';
+import { groundHeightAt } from './ground.js';
 
 // Ten grave markers flanking the church approach, alternating sides so the
 // walk reads as an avenue. They carried carved song titles when the credits
@@ -109,22 +110,27 @@ export function buildMonuments({ scene, stonesGltf, creditCount }) {
     stonesGltf.scene.traverse((o) => { if (o.isMesh) sources.push(o); });
   }
 
-  // The exact top surface of each stone. standUpright() puts the feet on
-  // y = 0, so the top is simply its height. Returned rather than discarded
-  // (it used to be built and thrown away with the rest of the return value)
-  // because something standing ON a stone needs the real surface, not a
-  // number typed next to it.
+  // The exact top surface of each stone. standUpright() puts the feet on the
+  // object's own y = 0, so the top is that base plus its height. Returned
+  // rather than discarded (it used to be built and thrown away with the rest
+  // of the return value) because something standing ON a stone needs the real
+  // surface, not a number typed next to it.
   const stoneTops = [];
   const count = Math.min(creditCount, MONUMENT_SPOTS.length);
   for (let i = 0; i < count; i++) {
     const [x, z, rotY, s] = MONUMENT_SPOTS[i];
     const src = sources.length ? sources[i % sources.length].clone(true) : fallbackStone();
     const stone = standUpright(src, STONE_HEIGHT * s);
-    stone.position.set(x, 0, z);
+    // On the terrain, not at y = 0 -- the same correction place() in world.js
+    // already makes for the gravestones and boulders. The ground dips into a
+    // basin under each pool (see BASIN_DEPTH), and three of the ten spots
+    // below sit inside that dip: pinned to zero they hovered up to 15cm above
+    // the bank they are supposed to be standing in.
+    const baseY = groundHeightAt(x, z);
+    stone.position.set(x, baseY, z);
     stone.rotation.y = rotY;
     scene.add(stone);
-    stoneTops.push(new THREE.Vector3(x, STONE_HEIGHT * s, z));
-
+    stoneTops.push(new THREE.Vector3(x, baseY + STONE_HEIGHT * s, z));
   }
 
   // Clamped rather than indexed blind: creditCount can be smaller than
