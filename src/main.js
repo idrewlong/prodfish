@@ -12,14 +12,25 @@ import { createPanels } from './panels.js';
 import { createAmbience, duckLevel } from './audio.js';
 import { journeyDistancePx, trackPxWithChapel, viewportBasis, resetViewportBasis } from './journey.js';
 
-function webglAvailable() {
+// Probing costs a real GL context, and contexts are a scarce per-tab resource
+// -- browsers cap them at a handful and evict the oldest, which on a phone is
+// the one the scene is drawing into. So the probe hands its context straight
+// back via WEBGL_lose_context, and the answer is computed once and cached
+// rather than re-derived at each branch below.
+function probeWebgl() {
   try {
     const c = document.createElement('canvas');
-    return !!(window.WebGLRenderingContext && (c.getContext('webgl2') || c.getContext('webgl')));
+    if (!window.WebGLRenderingContext) return false;
+    const gl = c.getContext('webgl2') || c.getContext('webgl');
+    if (!gl) return false;
+    gl.getExtension('WEBGL_lose_context')?.loseContext();
+    return true;
   } catch {
     return false;
   }
 }
+
+const hasWebgl = probeWebgl();
 
 const prefersReduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -578,12 +589,12 @@ awaitTitleFont();
 // body.loading is what hands the hero title over to the loading sequence, so
 // it is set only on the paths that actually boot a scene. The no-WebGL page
 // never does, and gets an ordinary lit title with no ember over it.
-if (webglAvailable()) {
+if (hasWebgl) {
   document.body.classList.add('loading');
   paceReveal();
 }
 
-if (!webglAvailable()) {
+if (!hasWebgl) {
   document.body.classList.add('no-webgl');
   // This path never boots a scene, so it never reaches markReady(). #chapel is
   // laid out visibly here (see .no-webgl #chapel), which usually means the lazy
