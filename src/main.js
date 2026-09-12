@@ -417,7 +417,18 @@ function bootFailed(err) {
   // .failed drains the light out of it instead — a dead candle.
   document.body.classList.add('failed');
   const word = loading.querySelector('.load-word') ?? loading;
-  word.textContent = 'something went wrong — refresh to retry';
+  // #loading is aria-hidden while it is doing its job: it is decoration over a
+  // heading that is already announced. A failure is the one thing in it that
+  // is not decoration, so the overlay comes back out of hiding and the caption
+  // becomes a live region. Without this the only signal that the site is dead
+  // was a visual one, and a screen reader sat on a silent page forever.
+  loading.removeAttribute('aria-hidden');
+  word.setAttribute('role', 'alert');
+  // A live region that gains its role and its text in the same task is
+  // routinely missed; letting the role land first is what gets it spoken.
+  requestAnimationFrame(() => {
+    word.textContent = 'something went wrong — refresh to retry';
+  });
   // Inline styles win over the .reduced/.no-webgl CSS rules that otherwise
   // hide #loading in those modes, so the message is visible regardless of
   // which boot path failed.
